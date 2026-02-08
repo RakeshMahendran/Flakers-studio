@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: flakers-studio-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./server
