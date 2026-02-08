@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ComponentRenderOrChildren } from "@/components/tambo/base/types/component-render-or-children";
 
 interface GovernancePanelProps {
   rulesApplied: string[];
   decision: "ANSWER" | "REFUSE";
   reason?: string;
   processingTimeMs: number;
-  children?: ComponentRenderOrChildren;
+  children?: React.ReactNode;
 }
 
 const RULE_DESCRIPTIONS = {

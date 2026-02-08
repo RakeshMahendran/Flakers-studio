@@ -61,15 +61,18 @@ export const generativeComponents = [
     name: 'AssistantCard', 
     component: AssistantCard,
     propsSchema: assistantCardSchema,
+    description: 'Display an assistant card with status and details',
   },
   { 
     name: 'GovernanceDecisionTree', 
     component: GovernanceDecisionTree,
     propsSchema: governanceDecisionTreeSchema,
+    description: 'Show governance decision tree with pass/fail steps',
   },
   { 
     name: 'PricingCard', 
     component: PricingCard,
     propsSchema: pricingCardSchema,
+    description: 'Display pricing tiers and plans',
   },
 ];

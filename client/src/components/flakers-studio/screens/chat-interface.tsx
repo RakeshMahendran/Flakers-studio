@@ -478,11 +478,14 @@ const MessageBubble: React.FC<{ message: ChatMessage; onToggleExplanation: () =>
   const renderGenerativeComponent = () => {
     if (!message.component) return null;
     
-    const Component = generativeComponents[message.component.type as keyof typeof generativeComponents];
-    if (!Component) {
-      console.warn(`Unknown component type: ${message.component.type}`);
+    const componentType = message.component.type;
+    const componentDef = generativeComponents.find(c => c.name === componentType);
+    if (!componentDef) {
+      console.warn(`Unknown component type: ${componentType}`);
       return null;
     }
+    
+    const Component = componentDef.component as React.ComponentType<any>;
     
     return (
       <div className="mt-4">

@@ -1,13 +1,11 @@
 "use client";
 
-import { ComponentRenderOrChildren } from "@/components/tambo/base/types/component-render-or-children";
-
 interface RefusalCardProps {
   reason: string;
   allowedScope: string[];
   rulesApplied: string[];
   processingTimeMs: number;
-  children?: ComponentRenderOrChildren;
+  children?: React.ReactNode;
 }
 
 const REFUSAL_MESSAGES = {

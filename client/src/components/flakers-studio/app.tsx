@@ -126,36 +126,25 @@ export function FlakersStudioApp() {
       )}
       
       {appState === "dashboard" && user && (
-        <DashboardScreen
-          user={user}
-          onLogout={handleLogout}
-          onCreateAssistant={handleCreateAssistant}
-          onSelectAssistant={handleSelectAssistant}
-        />
+        <DashboardScreen />
       )}
       
       {appState === "create-assistant" && user && (
         <AssistantCreationFlow
-          user={user}
-          onComplete={handleAssistantCreated}
+          onComplete={handleBackToDashboard}
           onCancel={handleBackToDashboard}
         />
       )}
       
-      {appState === "review" && selectedAssistant && assistantDraft && (
+      {appState === "review" && selectedAssistant && (
         <AssistantReviewScreen
           assistantId={selectedAssistant.id}
-          assistantDraft={assistantDraft}
-          discoveredContent={discoveredContent}
-          onFinish={handleReviewFinish}
         />
       )}
       
       {appState === "chat" && user && selectedAssistant && (
         <ChatInterfaceTambo
-          user={user}
-          assistant={selectedAssistant}
-          onBack={handleBackToDashboard}
+          assistantId={selectedAssistant.id}
         />
       )}
     </div>

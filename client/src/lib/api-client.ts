@@ -15,9 +15,9 @@ export async function apiClient(
 ): Promise<Response> {
   const { token, headers = {}, ...restOptions } = options;
 
-  const requestHeaders: HeadersInit = {
+  const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...headers,
+    ...headers as Record<string, string>,
   };
 
   // Add authorization header if token is provided

@@ -108,13 +108,13 @@ function TamboFullChatArea({ assistant }: { assistant: Assistant }) {
   // Add assistant context as attachment when component mounts
   useEffect(() => {
     addContextAttachment({
-      context: {
+      context: JSON.stringify({
         assistant_id: assistant.id,
         assistant_name: assistant.name,
         site_url: assistant.siteUrl,
         template: assistant.template,
         instruction: "Use the query_rag_backend tool to answer questions about this assistant's knowledge base.",
-      },
+      }),
       displayName: `Assistant: ${assistant.name}`,
       type: "assistant_context",
     });
@@ -228,7 +228,7 @@ function ChatSidebar({
                 <ThreadHistoryNewButton />
               </div>
             </ThreadHistoryHeader>
-            <ThreadHistorySearch placeholder="Search conversations..." />
+            <ThreadHistorySearch />
           </div>
           <div className="overflow-y-auto">
             <ThreadHistoryList />

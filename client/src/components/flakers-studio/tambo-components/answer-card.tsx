@@ -1,7 +1,5 @@
 "use client";
 
-import { ComponentRenderOrChildren } from "@/components/tambo/base/types/component-render-or-children";
-
 interface Source {
   url: string;
   title: string;
@@ -13,7 +11,7 @@ interface AnswerCardProps {
   sources: Source[];
   rulesApplied: string[];
   processingTimeMs: number;
-  children?: ComponentRenderOrChildren;
+  children?: React.ReactNode;
 }
 
 export function AnswerCard({

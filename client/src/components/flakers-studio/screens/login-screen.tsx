@@ -6,7 +6,18 @@ import { Button, Card, Badge, Input } from "@/components/ui/enhanced-ui";
 import { Bot, Shield, Brain, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
-export function LoginScreen() {
+export interface LoginScreenUser {
+  id: string;
+  email: string;
+  tenantId: string;
+  accessToken: string;
+}
+
+export interface LoginScreenProps {
+  onLogin?: (userData: LoginScreenUser) => void;
+}
+
+export function LoginScreen({ onLogin }: LoginScreenProps = {}) {
   const { login } = useAuth();
   const [email, setEmail] = useState("demo@flakers.studio");
   const [password, setPassword] = useState("demo123");
@@ -25,12 +36,14 @@ export function LoginScreen() {
       // For demo purposes, accept any credentials
       // Generate IDs on client side only to avoid hydration mismatch
       if (typeof window !== 'undefined') {
-        login({
+        const userData: LoginScreenUser = {
           id: crypto.randomUUID(),
           email,
           tenantId: crypto.randomUUID(),
           accessToken: "demo-token-" + Date.now(),
-        });
+        };
+        login(userData);
+        onLogin?.(userData);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

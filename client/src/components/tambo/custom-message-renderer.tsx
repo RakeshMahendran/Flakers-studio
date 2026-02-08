@@ -16,8 +16,8 @@ interface CustomMessageRendererProps {
 
 export function CustomMessageRenderer({ message }: CustomMessageRendererProps) {
   // Check if this message has a query_rag_backend tool call
-  const ragToolCall = message.toolCalls?.find(
-    (tc) => tc.toolName === "query_rag_backend"
+  const ragToolCall: any = message.tool_calls?.find(
+    (tc: any) => tc.toolName === "query_rag_backend"
   );
 
   if (!ragToolCall || !ragToolCall.result) {
