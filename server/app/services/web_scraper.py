@@ -109,8 +109,25 @@ class WebScraperService:
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        # Try to use system Chrome/Chromium first (for Render/production)
+        import os
+        import shutil
+        
+        chromium_path = shutil.which("chromium") or shutil.which("chromium-browser")
+        chrome_path = shutil.which("google-chrome") or shutil.which("chrome")
+        
+        if chromium_path:
+            # Use system Chromium (Render)
+            chrome_options.binary_location = chromium_path
+            driver = webdriver.Chrome(options=chrome_options)
+        elif chrome_path:
+            # Use system Chrome
+            chrome_options.binary_location = chrome_path
+            driver = webdriver.Chrome(options=chrome_options)
+        else:
+            # Fallback to ChromeDriverManager (local development)
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
         
         # Set timeouts
         driver.implicitly_wait(10)
