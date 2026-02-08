@@ -4,3 +4,12 @@ services:
     env: docker
     dockerfilePath: ./server/Dockerfile
     dockerContext: ./server
+    plan: starter  # 512MB RAM
+    healthCheckPath: /health
+    envVars:
+      - key: WEB_CONCURRENCY
+        value: 1
+      - key: MAX_WORKERS
+        value: 1
+      - key: PYTHONUNBUFFERED
+        value: 1

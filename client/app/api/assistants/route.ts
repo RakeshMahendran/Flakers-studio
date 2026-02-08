@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Forward the request to the Python backend
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
+    const backendUrl = process.env.BACKEND_URL || 'https://flakers-studio-1.onrender.com';
     
     const response = await fetch(`${backendUrl}/assistant`, {
       method: 'GET',

@@ -63,5 +63,9 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True if os.getenv("ENVIRONMENT") == "development" else False
+        reload=True if os.getenv("ENVIRONMENT") == "development" else False,
+        workers=1,  # Single worker for memory efficiency
+        limit_concurrency=10,  # Limit concurrent connections
+        timeout_keep_alive=5,  # Reduce keep-alive timeout
+        access_log=False if os.getenv("ENVIRONMENT") == "production" else True  # Disable access logs in production
     )

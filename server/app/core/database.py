@@ -8,11 +8,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 
 from app.core.config import settings
 
-# Create async engine
+# Create async engine with memory optimization
 async_engine = create_async_engine(
     settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
     echo=settings.DEBUG,
-    future=True
+    future=True,
+    pool_size=5,  # Reduce connection pool size
+    max_overflow=5,  # Limit overflow connections
+    pool_pre_ping=True,  # Verify connections before use
+    pool_recycle=3600  # Recycle connections after 1 hour
 )
 
 # Create async session factory
