@@ -1,13 +1,15 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export interface User {
   id: string;
   email: string;
   tenantId: string;
+  tenantName?: string;
   accessToken: string;
+  refreshToken?: string;
 }
 
 interface AuthContextType {
@@ -23,7 +25,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     // Load user from localStorage on mount

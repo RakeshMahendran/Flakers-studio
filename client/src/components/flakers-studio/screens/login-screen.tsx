@@ -10,7 +10,9 @@ export interface LoginScreenUser {
   id: string;
   email: string;
   tenantId: string;
+  tenantName?: string;
   accessToken: string;
+  refreshToken?: string;
 }
 
 export interface LoginScreenProps {
@@ -30,21 +32,39 @@ export function LoginScreen({ onLogin }: LoginScreenProps = {}) {
     setError("");
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // For demo purposes, accept any credentials
-      // Generate IDs on client side only to avoid hydration mismatch
-      if (typeof window !== 'undefined') {
-        const userData: LoginScreenUser = {
-          id: crypto.randomUUID(),
-          email,
-          tenantId: crypto.randomUUID(),
-          accessToken: "demo-token-" + Date.now(),
-        };
-        login(userData);
-        onLogin?.(userData);
+      const loginResponse = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const loginData = await loginResponse.json().catch(() => null);
+      if (!loginResponse.ok || !loginData) {
+        throw new Error(loginData?.detail || "Login failed");
       }
+
+      const profileResponse = await fetch("/api/auth/me", {
+        headers: {
+          Authorization: `Bearer ${loginData.access_token}`,
+        },
+      });
+      const profileData = await profileResponse.json().catch(() => null);
+      if (!profileResponse.ok || !profileData) {
+        throw new Error(profileData?.detail || "Failed to load user profile");
+      }
+
+      const userData: LoginScreenUser = {
+        id: loginData.user_id,
+        email: profileData.email ?? email,
+        tenantId: loginData.tenant_id,
+        tenantName: profileData.tenant_name,
+        accessToken: loginData.access_token,
+        refreshToken: loginData.refresh_token,
+      };
+      login(userData);
+      onLogin?.(userData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

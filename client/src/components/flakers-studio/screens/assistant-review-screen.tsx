@@ -4,9 +4,9 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Card, Badge } from "@/components/ui/enhanced-ui";
-import { CheckCircle, Globe, Bot, FileText, ArrowRight } from "lucide-react";
+import { CheckCircle, Globe, Bot, FileText, ArrowRight, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import type { Assistant } from "./dashboard-screen";
+import { normalizeAssistant, type Assistant } from "./dashboard-screen";
 import { apiGet } from "@/lib/api-client";
 
 interface AssistantReviewScreenProps {
@@ -28,7 +28,9 @@ export function AssistantReviewScreen({
       try {
         const response = await apiGet('/api/assistants', user.accessToken);
         const data = await response.json();
-        const found = data.assistants?.find((a: Assistant) => a.id === assistantId);
+        const found = data.assistants
+          ?.map((assistantRecord: Assistant) => normalizeAssistant(assistantRecord))
+          .find((a: Assistant) => a.id === assistantId);
         if (found) {
           setAssistant(found);
         }
@@ -121,6 +123,64 @@ export function AssistantReviewScreen({
           </Card>
 
           <Card className="md:col-span-2">
+            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              Governance Configuration
+            </h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Allowed intents</span>
+                  <span className="font-medium text-slate-900">{assistant.allowedIntents?.length || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Context required</span>
+                  <Badge color={assistant.governanceRules?.require_context ? "green" : "slate"}>
+                    {assistant.governanceRules?.require_context ? "Enabled" : "Disabled"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Tenant isolation</span>
+                  <Badge color={assistant.governanceRules?.tenant_isolation ? "green" : "slate"}>
+                    {assistant.governanceRules?.tenant_isolation ? "Enforced" : "Relaxed"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Source attribution</span>
+                  <Badge color={assistant.governanceRules?.attribution_required ? "green" : "slate"}>
+                    {assistant.governanceRules?.attribution_required ? "Required" : "Optional"}
+                  </Badge>
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-slate-600 mb-2">Intent coverage</div>
+                <div className="flex flex-wrap gap-2">
+                  {(assistant.allowedIntents || []).map((intent) => (
+                    <Badge key={intent} color="blue" className="capitalize">
+                      {intent.replaceAll("_", " ")}
+                    </Badge>
+                  ))}
+                  {(!assistant.allowedIntents || assistant.allowedIntents.length === 0) && (
+                    <span className="text-sm text-slate-500">No specific intent restrictions</span>
+                  )}
+                </div>
+                <div className="mt-4 text-sm text-slate-600">
+                  Confidence threshold:{" "}
+                  <span className="font-medium text-slate-900">
+                    {assistant.governanceRules?.confidence_threshold ?? "default"}
+                  </span>
+                </div>
+                <div className="mt-2 text-sm text-slate-600">
+                  Policy handling:{" "}
+                  <span className="font-medium text-slate-900">
+                    {assistant.governanceRules?.policy_quote_only ? "Quote-only" : "Standard answer mode"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="md:col-span-2">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Ingestion Summary</h3>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="text-center p-4 bg-blue-50 rounded-lg">
@@ -134,6 +194,45 @@ export function AssistantReviewScreen({
               <div className="text-center p-4 bg-purple-50 rounded-lg">
                 <div className="text-2xl font-bold text-purple-600">{assistant.allowedIntents?.length || 0}</div>
                 <div className="text-sm text-slate-600">Intent Groups</div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="md:col-span-2">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Widget Configuration</h3>
+            <div className="grid gap-4 md:grid-cols-2 text-sm">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Public widget</span>
+                  <Badge color={assistant.widgetConfig?.enabled ? "green" : "slate"}>
+                    {assistant.widgetConfig?.enabled ? "Enabled" : "Disabled"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Launcher label</span>
+                  <span className="font-medium text-slate-900">
+                    {assistant.widgetConfig?.launcher_label || "Chat"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Position</span>
+                  <span className="font-medium text-slate-900">
+                    {assistant.widgetConfig?.position || "bottom-right"}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="text-slate-600 mb-2">Allowed origins</div>
+                <div className="flex flex-wrap gap-2">
+                  {(assistant.widgetConfig?.allowed_origins || []).map((origin) => (
+                    <Badge key={origin} color="blue">
+                      {origin}
+                    </Badge>
+                  ))}
+                  {(!assistant.widgetConfig?.allowed_origins || assistant.widgetConfig.allowed_origins.length === 0) && (
+                    <span className="text-slate-500">No origin restrictions configured yet</span>
+                  )}
+                </div>
               </div>
             </div>
           </Card>

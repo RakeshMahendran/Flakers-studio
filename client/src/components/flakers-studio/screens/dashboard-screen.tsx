@@ -8,6 +8,28 @@ import { Plus, MessageSquare, ArrowRight, Settings, BarChart2, MoreHorizontal, F
 import { useAuth } from "@/contexts/auth-context";
 import { apiGet, apiDelete } from "@/lib/api-client";
 
+type GovernanceRules = {
+  require_context?: boolean;
+  tenant_isolation?: boolean;
+  attribution_required?: boolean;
+  policy_quote_only?: boolean;
+  confidence_threshold?: number;
+  [key: string]: unknown;
+};
+
+type WidgetConfig = {
+  enabled?: boolean;
+  allowed_origins?: string[];
+  position?: "bottom-right" | "bottom-left";
+  primary_color?: string;
+  title?: string;
+  subtitle?: string;
+  launcher_label?: string;
+  send_label?: string;
+  placeholder?: string;
+  welcome_message?: string;
+};
+
 export interface Assistant {
   id: string;
   name: string;
@@ -20,7 +42,54 @@ export interface Assistant {
   totalPagesCrawled: string;
   totalChunksIndexed: string;
   allowedIntents?: string[];  // Made optional to handle undefined/null
+  governanceRules?: GovernanceRules;
+  widgetConfig?: WidgetConfig;
   createdAt: string;
+}
+
+type AssistantApiRecord = {
+  id: string;
+  name: string;
+  description?: string;
+  source_type?: "website" | "wordpress";
+  sourceType?: "website" | "wordpress";
+  site_url?: string;
+  siteUrl?: string;
+  template: "support" | "customer" | "sales" | "ecommerce";
+  status: "creating" | "ingesting" | "ready" | "error";
+  status_message?: string;
+  statusMessage?: string;
+  total_pages_crawled?: string;
+  totalPagesCrawled?: string;
+  total_chunks_indexed?: string;
+  totalChunksIndexed?: string;
+  allowed_intents?: string[];
+  allowedIntents?: string[];
+  governance_rules?: GovernanceRules;
+  governanceRules?: GovernanceRules;
+  widget_config?: WidgetConfig;
+  widgetConfig?: WidgetConfig;
+  created_at?: string;
+  createdAt?: string;
+};
+
+export function normalizeAssistant(record: AssistantApiRecord): Assistant {
+  return {
+    id: record.id,
+    name: record.name,
+    description: record.description,
+    sourceType: record.sourceType ?? record.source_type ?? "website",
+    siteUrl: record.siteUrl ?? record.site_url ?? "",
+    template: record.template,
+    status: record.status,
+    statusMessage: record.statusMessage ?? record.status_message,
+    totalPagesCrawled: record.totalPagesCrawled ?? record.total_pages_crawled ?? "0",
+    totalChunksIndexed: record.totalChunksIndexed ?? record.total_chunks_indexed ?? "0",
+    allowedIntents: record.allowedIntents ?? record.allowed_intents ?? [],
+    governanceRules: record.governanceRules ?? record.governance_rules ?? {},
+    widgetConfig: record.widgetConfig ?? record.widget_config ?? {},
+    createdAt: record.createdAt ?? record.created_at ?? new Date().toISOString(),
+  };
 }
 
 export function DashboardScreen() {
@@ -73,7 +142,7 @@ export function DashboardScreen() {
       
       if (response.ok) {
         const data = await response.json();
-        setAssistants(data.assistants || []);
+        setAssistants(Array.isArray(data.assistants) ? data.assistants.map(normalizeAssistant) : []);
       } else {
         // Mock data for development
         setAssistants([
@@ -88,6 +157,11 @@ export function DashboardScreen() {
             totalPagesCrawled: "25",
             totalChunksIndexed: "150",
             allowedIntents: ["support", "documentation", "faq"],
+            governanceRules: {
+              require_context: true,
+              tenant_isolation: true,
+              attribution_required: true,
+            },
             createdAt: new Date().toISOString(),
           },
         ]);
@@ -107,6 +181,11 @@ export function DashboardScreen() {
           totalPagesCrawled: "25",
           totalChunksIndexed: "150",
           allowedIntents: ["support", "documentation", "faq"],
+          governanceRules: {
+            require_context: true,
+            tenant_isolation: true,
+            attribution_required: true,
+          },
           createdAt: new Date().toISOString(),
         },
       ]);
@@ -184,6 +263,42 @@ export function DashboardScreen() {
       default:
         return baseFeatures;
     }
+  };
+
+  const getGovernanceHighlights = (assistant: Assistant) => {
+    const rules = assistant.governanceRules || {};
+    const highlights: string[] = [];
+
+    if (rules.tenant_isolation) {
+      highlights.push("Tenant isolated");
+    }
+    if (rules.attribution_required) {
+      highlights.push("Citations required");
+    }
+    if (rules.policy_quote_only) {
+      highlights.push("Policy quote-only");
+    }
+    if (rules.require_context) {
+      highlights.push("Context required");
+    }
+
+    return highlights.slice(0, 3);
+  };
+
+  const getWidgetHighlights = (assistant: Assistant) => {
+    const widget = assistant.widgetConfig || {};
+    if (!widget.enabled) {
+      return ["Widget disabled"];
+    }
+
+    const highlights = ["Widget enabled"];
+    if (widget.allowed_origins?.length) {
+      highlights.push(`${widget.allowed_origins.length} origins`);
+    }
+    if (widget.position) {
+      highlights.push(widget.position);
+    }
+    return highlights.slice(0, 3);
   };
 
   const handleDeleteAssistant = async (assistantId: string, e: React.MouseEvent) => {
@@ -462,6 +577,37 @@ export function DashboardScreen() {
                     {getTamboFeatures(assistant.template).map((feature) => (
                       <Badge key={feature} color="blue" className="text-xs">{feature}</Badge>
                     ))}
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 mb-2">
+                      Governance
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {getGovernanceHighlights(assistant).map((item) => (
+                        <Badge key={item} color="green" className="text-xs">
+                          {item}
+                        </Badge>
+                      ))}
+                      {(assistant.allowedIntents || []).slice(0, 2).map((intent) => (
+                        <Badge key={intent} color="slate" className="text-xs capitalize">
+                          {intent.replaceAll("_", " ")}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 mb-2">
+                      Widget
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {getWidgetHighlights(assistant).map((item) => (
+                        <Badge key={item} color={item === "Widget disabled" ? "slate" : "blue"} className="text-xs">
+                          {item}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-4 border-t border-slate-50 text-xs font-medium text-slate-400">

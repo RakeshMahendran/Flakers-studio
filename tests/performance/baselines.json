@@ -1,0 +1,4 @@
+{
+  "chat_route_p95_ms": 50.0,
+  "ingestion_pipeline_p95_ms": 100.0
+}
