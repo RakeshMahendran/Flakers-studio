@@ -15,7 +15,9 @@ from backend.api.routes import assistant, chat, auth, projects, analytics, publi
 from backend.config.database import init_db
 from backend.config.logging import configure_logging, log_context
 from backend.observability.metrics import metrics_response
+from backend.observability.otel import setup_otel
 from backend.vector_providers.qdrant_provider import init_qdrant
+from backend.observability.middleware import PerformanceMiddleware
 
 load_dotenv()
 configure_logging()
@@ -32,7 +34,10 @@ async def lifespan(app: FastAPI):
     
     # Initialize Qdrant
     await init_qdrant()
-    
+
+    # Initialize OpenTelemetry + App Insights
+    setup_otel(app)
+
     yield
     
     # Cleanup on shutdown
@@ -53,6 +58,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Performance monitoring middleware
+app.add_middleware(PerformanceMiddleware)
 
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["authentication"])

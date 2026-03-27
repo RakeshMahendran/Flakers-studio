@@ -18,6 +18,15 @@ psycopg2-binary==2.9.10
 tenacity==9.0.0
 prometheus_client==0.24.1
 
+# OpenTelemetry + Azure Monitor
+opentelemetry-api==1.37.0
+opentelemetry-sdk==1.37.0
+opentelemetry-semantic-conventions==0.58b0
+opentelemetry-instrumentation-fastapi==0.58b0
+opentelemetry-instrumentation-asyncpg==0.58b0
+opentelemetry-instrumentation-httpx==0.58b0
+azure-monitor-opentelemetry-exporter==1.0.0b41
+
 # Web Scraping
 selenium==4.27.1
 webdriver-manager==4.0.2
