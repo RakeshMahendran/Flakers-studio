@@ -25,6 +25,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scraping", tags=["scraping"])
 
+_BLOCKED_SCHEMES = {"file", "ftp", "gopher", "data", "javascript"}
+_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]"}
+
+
+def _validate_scrape_url(url: str) -> None:
+    """Reject URLs that target internal resources (SSRF protection)."""
+    from urllib.parse import urlparse
+    import ipaddress
+
+    parsed = urlparse(str(url))
+    if parsed.scheme.lower() in _BLOCKED_SCHEMES:
+        raise HTTPException(status_code=400, detail=f"URL scheme '{parsed.scheme}' is not allowed")
+    if not parsed.hostname:
+        raise HTTPException(status_code=400, detail="URL must include a valid hostname")
+    hostname = parsed.hostname.lower()
+    if hostname in _BLOCKED_HOSTS:
+        raise HTTPException(status_code=400, detail="Scraping internal/localhost URLs is not allowed")
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+            raise HTTPException(status_code=400, detail="Scraping private/internal IP addresses is not allowed")
+    except ValueError:
+        pass  # Not an IP literal — that's fine (regular hostname)
+
+
 # Pydantic models for request/response
 class PreviewContentRequest(BaseModel):
     """Preview content request model"""
@@ -50,10 +75,13 @@ async def preview_website_content(
     Used during the assistant creation flow.
     """
     try:
+        _validate_scrape_url(str(request.url))
         preview_data = await discovery_service.preview_website_content(str(request.url))
-        
+
         return preview_data
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error previewing website content: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to preview content: {str(e)}")
@@ -85,6 +113,8 @@ async def preview_website_content_stream(
             except Exception as e:
                 logger.error(f"Error adding progress: {e}")
         
+        _validate_scrape_url(str(request.url))
+
         async def run_preview():
             """Run preview in background"""
             try:

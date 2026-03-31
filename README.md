@@ -40,7 +40,7 @@ FlakersStudio is a hosted enterprise platform that enables organizations to crea
 
 ### Key Components
 
-#### Governance Engine (`app/services/governance.py`)
+#### Governance Engine (`backend/services/governance.py`)
 The heart of the system that makes all AI decisions:
 - Evaluates every query against governance rules
 - Returns structured decisions (ANSWER/REFUSE)
@@ -150,10 +150,10 @@ FlakersStudio uses Tambo AI for governance-driven UI:
 ### Key Files
 
 **Backend**:
-- `server/app/services/governance.py` - Core governance engine
-- `server/app/api/routes/chat.py` - Critical chat endpoint
-- `server/app/models/` - Database models
-- `server/app/core/qdrant_client.py` - Vector database client
+- `backend/services/governance.py` - Core governance engine
+- `backend/api/routes/chat.py` - Critical chat endpoint
+- `backend/models/` - Database models
+- `backend/vector_providers/qdrant_provider.py` - Vector database client
 
 **Frontend**:
 - `client/src/components/flakers-studio/app.tsx` - Main application

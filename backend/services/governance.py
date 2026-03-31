@@ -140,10 +140,20 @@ class GovernanceEngine:
         )
     
     def _check_tenant_isolation(self, chunks: List[Dict[str, Any]], tenant_id: str) -> bool:
-        """Check if any chunks violate tenant isolation"""
-        # In a real implementation, this would check chunk metadata
-        # For now, we assume all chunks belong to the correct tenant
-        # since they were retrieved with assistant_id filter
+        """Check if any chunks violate tenant isolation.
+
+        Returns True if a violation is detected (i.e. a chunk belongs to a
+        different tenant than the one making the request).
+        """
+        for chunk in chunks:
+            chunk_tenant = chunk.get("tenant_id")
+            if chunk_tenant and str(chunk_tenant) != str(tenant_id):
+                logger.warning(
+                    "Tenant isolation violation: chunk tenant %s != request tenant %s",
+                    chunk_tenant,
+                    tenant_id,
+                )
+                return True
         return False
     
     def _filter_by_intent(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

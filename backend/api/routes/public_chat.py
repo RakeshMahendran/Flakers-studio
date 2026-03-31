@@ -63,6 +63,8 @@ async def get_public_api_key(
     api_key = await AuthService.authenticate_api_key(db, raw_api_key or "")
     if api_key is None:
         raise HTTPException(status_code=401, detail="Invalid API key")
+    if not api_key.is_active:
+        raise HTTPException(status_code=401, detail="API key has been revoked")
     return api_key
 
 

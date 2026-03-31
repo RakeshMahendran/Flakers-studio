@@ -5,7 +5,7 @@ Handles cooperative project deletion with proper cleanup
 import logging
 from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from datetime import datetime
 
 from backend.models.project import Project, ProjectStatus

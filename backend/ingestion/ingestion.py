@@ -220,7 +220,12 @@ class IngestionService:
                     
                     texts = [chunk.content for chunk in all_chunks]
                     embeddings = await self.embedding_service.embed_texts(texts)
-                    
+
+                    if len(embeddings) != len(texts):
+                        raise Exception(
+                            f"Embedding count mismatch: sent {len(texts)} texts but got {len(embeddings)} embeddings"
+                        )
+
                     logger.info(f"Job {job_id}: Generated {len(embeddings)} embeddings")
                     
                     # Ensure collection exists
@@ -257,17 +262,22 @@ class IngestionService:
                         assistant_name=assistant_name,
                         user_name=user_name
                     )
-                    
+
+                    if len(point_ids) != len(all_chunks):
+                        raise Exception(
+                            f"Qdrant upsert mismatch: sent {len(all_chunks)} chunks but got {len(point_ids)} point IDs"
+                        )
+
                     job.chunks_uploaded = len(point_ids)
                     await db.commit()
-                    
+
                     logger.info(f"Job {job_id}: Uploaded {len(point_ids)} chunks to Qdrant")
-                    
+
                     # Store in database
                     await self._raise_if_cancelled(db, job_id, "database chunk persistence")
                     job.current_stage = "storing"
                     await db.commit()
-                    
+
                     for chunk, point_id in zip(all_chunks, point_ids):
                         await self._raise_if_cancelled(db, job_id, f"persisting chunk {point_id}")
                         db_chunk = ContentChunk(

@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
 from backend.config.database import get_db
+from backend.api.dependencies import get_current_tenant
+from backend.models.tenant import Tenant
+from backend.models.assistant import Assistant
 from backend.ingestion.status_updater import StatusUpdateService
 from backend.ingestion.cancellation import request_job_cancellation
 
@@ -62,10 +65,22 @@ def get_status_service() -> StatusUpdateService:
 @router.get("/assistant/{assistant_id}", response_model=AssistantStatusResponse)
 async def get_assistant_status(
     assistant_id: str,
-    status_service: StatusUpdateService = Depends(get_status_service)
+    db: AsyncSession = Depends(get_db),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    status_service: StatusUpdateService = Depends(get_status_service),
 ):
     """Get current status of an assistant with job monitoring"""
     try:
+        from sqlalchemy import select as sa_select
+        result = await db.execute(
+            sa_select(Assistant).where(
+                Assistant.id == assistant_id,
+                Assistant.tenant_id == current_tenant.id,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Assistant not found")
+
         status_info = await status_service.sync_assistant_status(assistant_id)
         
         if "error" in status_info:
@@ -81,10 +96,20 @@ async def get_assistant_status(
 @router.get("/job/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(
     job_id: str,
-    status_service: StatusUpdateService = Depends(get_status_service)
+    db: AsyncSession = Depends(get_db),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    status_service: StatusUpdateService = Depends(get_status_service),
 ):
     """Get current status of a scraping job"""
     try:
+        from backend.models.content import IngestionJob as IJ
+        from sqlalchemy import select as sa_select
+        result = await db.execute(
+            sa_select(IJ).where(IJ.id == job_id, IJ.tenant_id == current_tenant.id)
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Job not found or access denied")
+
         job_status = await status_service.update_job_progress(job_id)
         
         if not job_status:
@@ -100,7 +125,9 @@ async def get_job_status(
 @router.post("/job/{job_id}/restart")
 async def restart_failed_job(
     job_id: str,
-    status_service: StatusUpdateService = Depends(get_status_service)
+    db: AsyncSession = Depends(get_db),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    status_service: StatusUpdateService = Depends(get_status_service),
 ):
     """Restart a failed ingestion job"""
     try:
@@ -124,7 +151,8 @@ async def restart_failed_job(
 async def cancel_job(
     job_id: str,
     reason: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_tenant: Tenant = Depends(get_current_tenant),
 ):
     """Request cooperative cancellation for a queued or running job."""
     try:
@@ -208,7 +236,8 @@ async def system_health_check(
 
 @router.get("/jobs/active")
 async def get_active_jobs(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_tenant: Tenant = Depends(get_current_tenant),
 ):
     """Get all currently active jobs"""
     try:
@@ -218,7 +247,10 @@ async def get_active_jobs(
         # Get active jobs from database
         result = await db.execute(
             select(IngestionJob)
-            .where(IngestionJob.status.in_(['running', 'queued']))
+            .where(
+                IngestionJob.status.in_(['running', 'queued']),
+                IngestionJob.tenant_id == current_tenant.id,
+            )
             .order_by(IngestionJob.started_at.desc())
         )
         jobs = result.scalars().all()
@@ -273,7 +305,9 @@ async def cleanup_stale_jobs(
 @router.get("/assistant/{assistant_id}/monitor")
 async def monitor_assistant(
     assistant_id: str,
-    status_service: StatusUpdateService = Depends(get_status_service)
+    db: AsyncSession = Depends(get_db),
+    current_tenant: Tenant = Depends(get_current_tenant),
+    status_service: StatusUpdateService = Depends(get_status_service),
 ):
     """Monitor assistant and update status based on job progress"""
     try:

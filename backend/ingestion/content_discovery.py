@@ -11,10 +11,11 @@ from datetime import datetime
 from urllib.parse import urlparse, urljoin
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.assistant import SourceType
+from backend.models.assistant import Assistant, SourceType
 from backend.models.content import IngestionJob, JobStatus
 from backend.models.ingestion_tracking import IngestionURL, URLStatus
 from backend.ingestion.web_scraper import WebScraperService, ScrapingConfig
+from backend.ingestion.wordpress_client import WordPressClient, WordPressConfig
 from backend.ingestion.content_processor import ContentProcessor
 from backend.config.database import AsyncSessionLocal
 
@@ -48,8 +49,9 @@ class ContentDiscoveryService:
         project_id: str,
         tenant_id: str,
         site_url: str,
+        source_type: str = "website",
         scraping_config: Optional[ScrapingConfig] = None,
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> str:
         """
         Start content discovery process - scrapes website and stores in database
@@ -77,7 +79,7 @@ class ContentDiscoveryService:
         # Start background scraping
         asyncio.create_task(
             self._execute_discovery(
-                job_id, assistant_id, site_url, scraping_config, progress_callback
+                job_id, assistant_id, site_url, source_type, scraping_config, progress_callback
             )
         )
         
@@ -88,32 +90,39 @@ class ContentDiscoveryService:
         job_id: str,
         assistant_id: str,
         site_url: str,
-        scraping_config: Optional[ScrapingConfig],
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]]
+        source_type: str = "website",
+        scraping_config: Optional[ScrapingConfig] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ):
-        """Execute discovery - scrape website and store in database"""
+        """Execute discovery - scrape website or fetch via WordPress API and store in database"""
         try:
             async with AsyncSessionLocal() as db:
                 job = await db.get(IngestionJob, job_id)
-                
-                # Use default config if not provided
-                if scraping_config is None:
-                    scraping_config = ScrapingConfig(
-                        max_pages=50,
-                        max_depth=3,
-                        delay_between_requests=1.0,
-                        timeout=30,
-                        follow_external_links=False
+
+                # ── WordPress REST API path ──────────────────────────
+                if source_type == SourceType.WORDPRESS.value or source_type == "wordpress":
+                    logger.info("Job %s: Fetching via WordPress REST API", job_id)
+                    scraped_pages = await self._fetch_wordpress(
+                        site_url, progress_callback,
                     )
-                
-                # Scrape website using parallel scraping (ONCE)
-                logger.info(f"Job {job_id}: Scraping website with parallel workers")
-                scraped_pages = await self.scraper.scrape_website_parallel(
-                    site_url,
-                    scraping_config,
-                    max_workers=5,
-                    progress_callback=progress_callback
-                )
+                else:
+                    # ── Generic Selenium scraping path ────────────────
+                    if scraping_config is None:
+                        scraping_config = ScrapingConfig(
+                            max_pages=50,
+                            max_depth=3,
+                            delay_between_requests=1.0,
+                            timeout=30,
+                            follow_external_links=False,
+                        )
+
+                    logger.info("Job %s: Scraping website with parallel workers", job_id)
+                    scraped_pages = await self.scraper.scrape_website_parallel(
+                        site_url,
+                        scraping_config,
+                        max_workers=5,
+                        progress_callback=progress_callback,
+                    )
                 
                 if not scraped_pages:
                     raise Exception("No pages were successfully scraped")
@@ -466,33 +475,102 @@ class ContentDiscoveryService:
                 "error": str(e)
             }
     
+    # ------------------------------------------------------------------
+    # WordPress REST API helpers
+    # ------------------------------------------------------------------
+
+    async def _fetch_wordpress(
+        self,
+        site_url: str,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> list:
+        """Fetch all content from a WordPress site via its REST API.
+
+        Returns a list of ``ScrapedPage`` objects identical to what the
+        Selenium scraper produces so the downstream pipeline is unchanged.
+        """
+        wp_client = WordPressClient(
+            site_url,
+            config=WordPressConfig(
+                per_page=100,
+                max_pages=50,
+                request_timeout=30,
+                delay_between_requests=0.5,
+                probe_optional_endpoints=True,
+            ),
+            progress_callback=progress_callback,
+        )
+        pages = await wp_client.fetch_all()
+        logger.info("WordPress REST API returned %d pages for %s", len(pages), site_url)
+        return pages
+
     async def _discover_wordpress_content(
         self,
         assistant_id: str,
-        site_url: str
+        site_url: str,
     ) -> Dict[str, Any]:
-        """Discover content from WordPress via REST API"""
-        # This would implement WordPress REST API integration
-        # For now, return mock data
-        
-        discovered_content = [
-            {
-                "url": f"{site_url}/wp-json/wp/v2/posts/1",
-                "title": "Getting Started Guide",
-                "content_type": "post",
-                "estimated_intent": "tutorial"
-            },
-            {
-                "url": f"{site_url}/wp-json/wp/v2/pages/1",
-                "title": "FAQ",
-                "content_type": "page",
-                "estimated_intent": "faq"
+        """Discover content from WordPress via REST API (used by preview)."""
+        try:
+            pages = await self._fetch_wordpress(site_url)
+            if not pages:
+                return {
+                    "assistant_id": assistant_id,
+                    "pages_discovered": 0,
+                    "pages": [],
+                    "status": "discovery_failed",
+                    "error": "WordPress REST API not available or returned no content",
+                }
+
+            processed_chunks = self.processor.process_scraped_pages(pages)
+
+            content_types: Dict[str, Dict] = {}
+            intent_map: Dict[str, Dict] = {}
+
+            for page in pages:
+                ct = page.content_type or "general"
+                if ct not in content_types:
+                    content_types[ct] = {"count": 0, "examples": []}
+                content_types[ct]["count"] += 1
+                if len(content_types[ct]["examples"]) < 3:
+                    content_types[ct]["examples"].append(page.title or page.url)
+
+            for chunk in processed_chunks:
+                intent = chunk.intent.value
+                if intent not in intent_map:
+                    intent_map[intent] = {"count": 0, "confidence": 0}
+                intent_map[intent]["count"] += 1
+                intent_map[intent]["confidence"] = max(
+                    intent_map[intent]["confidence"], chunk.confidence_score
+                )
+
+            return {
+                "assistant_id": assistant_id,
+                "pages_discovered": len(pages),
+                "pages": [
+                    {
+                        "url": p.url,
+                        "title": p.title,
+                        "content_type": p.content_type,
+                        "estimated_intent": p.content_type,
+                    }
+                    for p in pages
+                ],
+                "content_types": [
+                    {"type": ct.title(), "count": d["count"], "examples": d["examples"]}
+                    for ct, d in content_types.items()
+                ],
+                "intents": [
+                    {"intent": i, "confidence": d["confidence"], "pageCount": d["count"]}
+                    for i, d in intent_map.items()
+                ],
+                "status": "discovery_complete",
             }
-        ]
-        
-        return {
-            "assistant_id": assistant_id,
-            "pages_discovered": len(discovered_content),
-            "pages": discovered_content,
-            "status": "discovery_complete"
-        }
+        except Exception as e:
+            logger.error("WordPress discovery failed: %s", e, exc_info=True)
+            return {
+                "assistant_id": assistant_id,
+                "pages_discovered": 0,
+                "pages": [],
+                "status": "discovery_failed",
+                "error": str(e),
+            }

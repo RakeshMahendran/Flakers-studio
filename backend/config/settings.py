@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     
     # Environment
     ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
     
     # API Configuration
     API_V1_STR: str = "/api/v1"
@@ -69,4 +69,19 @@ class Settings(BaseSettings):
     def using_default_secret_key(self) -> bool:
         return self.SECRET_KEY == "your-secret-key-change-in-production"
 
+    def validate_for_production(self) -> None:
+        """Raise if critical settings are unsafe for non-development environments."""
+        if self.ENVIRONMENT != "development":
+            if self.using_default_secret_key:
+                raise RuntimeError(
+                    "FATAL: SECRET_KEY is still the default value. "
+                    "Set a strong SECRET_KEY environment variable before running in production."
+                )
+            if not self.AZURE_OPENAI_API_KEY:
+                raise RuntimeError(
+                    "FATAL: AZURE_OPENAI_API_KEY is not set. "
+                    "Azure OpenAI credentials are required for non-development environments."
+                )
+
 settings = Settings()
+settings.validate_for_production()

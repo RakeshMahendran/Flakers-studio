@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import logging
 import re
+import secrets
 import time
 
 from sqlalchemy import select
@@ -227,7 +228,7 @@ Provide a helpful, natural response based on the context above."""
             if session:
                 return session
 
-        session = ChatSession(assistant_id=assistant_id, session_token=f"session_{int(time.time())}")
+        session = ChatSession(assistant_id=assistant_id, session_token=secrets.token_urlsafe(32))
         db.add(session)
         await db.commit()
         await db.refresh(session)

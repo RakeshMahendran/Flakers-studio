@@ -387,6 +387,23 @@ Define baseline performance metrics for chat and ingestion, and add automated ch
 - `tests/performance/*`  
 - CI configuration  
 
+---
+
+### Maintenance Cleanup
+
+**Task:** C-1 – Normalize repository folder structure `[completed]`  
+**Description:**  
+Clean up legacy repository layout now that the active backend lives under `backend/` and the widget lives under `frontend/widget/`. Move operational scripts into grouped folders, update lingering legacy imports and documentation, and remove dead duplicated backend code without changing runtime behavior.  
+**Technical Scope:**  
+- Move loose `server/*.py` utility scripts into organized `server/scripts/*` folders.  
+- Update those scripts to import from `backend.*` instead of legacy `app.*`.  
+- Remove the redundant `server/app/*` package once no active references remain.  
+- Update docs and entrypoint references to match the cleaned structure.  
+**Modules Affected:**  
+- `server/*`  
+- `backend/*`  
+- `README.md`  
+
 
 
 
