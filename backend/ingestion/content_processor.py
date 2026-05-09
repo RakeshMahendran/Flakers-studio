@@ -206,6 +206,15 @@ class ContentProcessor:
                         'links_count': len(page.links),
                         'images_count': len(page.images)
                     }
+
+                    # Merge in rich metadata extracted at scrape time
+                    # (e.g. WordPress date / categories / event ACF fields).
+                    # Existing keys take precedence so processor-computed
+                    # values like quality_score are not overwritten.
+                    extracted = getattr(page, "extracted_metadata", None) or {}
+                    for key, value in extracted.items():
+                        if key not in metadata:
+                            metadata[key] = value
                     
                     # Create content chunk
                     chunk = ContentChunk(
