@@ -7,6 +7,7 @@ Adapted from TVS Sidekick's wordpress_url_scraper and intranet_api_data_fetcher.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -51,6 +52,12 @@ class WordPressConfig:
     password: str = ""
     # If True, also probe WooCommerce and media endpoints.
     probe_optional_endpoints: bool = True
+    # If True, fetch the public page and parse HTML when REST item text
+    # is empty (e.g. Elementor / page-builder pages where content.rendered
+    # and ACF are both blank).
+    enable_html_fallback: bool = True
+    # Hard cap so a broken / blocking site can't burn 1000+ fallback fetches.
+    max_html_fallback_pages: int = 50
 
 
 @dataclass
@@ -64,6 +71,9 @@ class WordPressFetchStats:
     products_fetched: int = 0
     media_fetched: int = 0
     failed_endpoints: List[str] = field(default_factory=list)
+    # Number of items rescued by the HTML fallback path
+    # (REST text was empty/insufficient and the public URL parse succeeded).
+    html_fallback_used: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +103,68 @@ def clean_wp_html(html_text: str) -> str:
     except Exception:
         text = re.sub(r"<[^>]+>", " ", html_text)
         return re.sub(r"\s+", " ", text).strip()
+
+
+# Selectors tried (in order) when falling back to raw HTML. We pick the
+# selector that yields the most cleaned text — Elementor / Divi / Beaver
+# Builder pages often render their content in <main> or [role="main"]
+# rather than .entry-content.
+_HTML_FALLBACK_SELECTORS: List[str] = [
+    "main",
+    "article",
+    '[role="main"]',
+    "#content",
+    ".entry-content",
+    ".site-content",
+    "body",
+]
+
+# Minimum cleaned-text length below which a WP item is treated as empty
+# and worth retrying via HTML fallback. Mirrors the existing 50-char
+# threshold in ``_wp_item_to_scraped_page``.
+_MIN_TEXT_LEN = 50
+
+
+async def _fetch_html_fallback(client: httpx.AsyncClient, url: str) -> str:
+    """Fetch ``url`` and return cleaned text from the best content container.
+
+    Returns ``""`` on any error (network, parse, etc.) — never raises. Uses
+    the supplied ``httpx.AsyncClient`` so connection pooling, redirects,
+    auth, and headers are inherited from the WordPress client.
+    """
+    if not url:
+        return ""
+    try:
+        resp = await client.get(url)
+        if resp.status_code != 200:
+            return ""
+        html = resp.text or ""
+        if not html:
+            return ""
+
+        soup = BeautifulSoup(html, "html.parser")
+        # Strip noise tags up-front so they can't dominate the text count.
+        for tag in soup(_STRIP_TAGS):
+            tag.decompose()
+        for selector in _WP_NOISE_SELECTORS:
+            for elem in soup.select(selector):
+                elem.decompose()
+
+        best_text = ""
+        for selector in _HTML_FALLBACK_SELECTORS:
+            try:
+                node = soup.select_one(selector)
+            except Exception:
+                node = None
+            if not node:
+                continue
+            candidate = clean_wp_html(str(node))
+            if len(candidate) > len(best_text):
+                best_text = candidate
+        return best_text
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.debug("HTML fallback failed for %s: %s", url, exc)
+        return ""
 
 
 def _rendered(obj: Any) -> str:
@@ -371,7 +443,9 @@ class WordPressClient:
 
                 items = data if isinstance(data, list) else [data]
                 for item in items:
-                    scraped = self._wp_item_to_scraped_page(item, content_type)
+                    scraped = await self._wp_item_to_scraped_page(
+                        client, item, content_type
+                    )
                     if scraped:
                         results.append(scraped)
 
@@ -408,13 +482,36 @@ class WordPressClient:
         logger.info("Fetched %d %s items from %s", count, content_type, ep_name)
         return results
 
-    def _wp_item_to_scraped_page(
-        self, item: Dict[str, Any], content_type: str
+    async def _wp_item_to_scraped_page(
+        self,
+        client: httpx.AsyncClient,
+        item: Dict[str, Any],
+        content_type: str,
     ) -> Optional[ScrapedPage]:
         """Convert a single WP REST API item to a ScrapedPage."""
         text = extract_wp_text(item)
-        if not text or len(text.strip()) < 50:
-            return None
+        used_html_fallback = False
+        if not text or len(text.strip()) < _MIN_TEXT_LEN:
+            # REST text is empty or too short (typical of Elementor / Divi
+            # page-builder pages where content.rendered + ACF are blank).
+            # Try fetching the public URL and parsing HTML directly.
+            fallback_text = ""
+            if (
+                self.config.enable_html_fallback
+                and self.stats.html_fallback_used < self.config.max_html_fallback_pages
+            ):
+                fallback_url = _item_url(item, self.site_url)
+                if fallback_url:
+                    fallback_text = await _fetch_html_fallback(client, fallback_url)
+                    # Be polite — same throttle as REST pagination.
+                    if self.config.delay_between_requests > 0:
+                        await asyncio.sleep(self.config.delay_between_requests)
+            if fallback_text and len(fallback_text.strip()) >= _MIN_TEXT_LEN:
+                text = fallback_text
+                used_html_fallback = True
+                self.stats.html_fallback_used += 1
+            else:
+                return None
 
         # Dedup by content hash
         chash = _content_hash(text)
@@ -443,6 +540,9 @@ class WordPressClient:
         except Exception as exc:  # pragma: no cover — defensive
             logger.debug("metadata extraction failed for %s: %s", url, exc)
             extracted = {}
+
+        if used_html_fallback:
+            extracted["extraction_method"] = "html_fallback"
 
         return ScrapedPage(
             url=url,
