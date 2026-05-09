@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlakersStudio Widget — Test Harness</title>
+
+  <!-- =================================================================
+       INTENTIONAL HOSTILE-HOST STYLES
+       These rules are designed to mangle the widget IF shadow DOM
+       isolation is broken. If the widget still renders correctly, the
+       isolation is working.
+       ================================================================= -->
+  <style>
+    * { box-sizing: content-box !important; }
+    button { background: red !important; color: lime !important; padding: 40px !important; border: 8px dashed magenta !important; font-family: "Comic Sans MS", cursive !important; font-size: 32px !important; }
+    input, textarea { background: black !important; color: hotpink !important; border: 6px ridge orange !important; }
+    a { color: rebeccapurple !important; text-decoration: line-through wavy !important; }
+    div { line-height: 4 !important; }
+    ::placeholder { color: yellow !important; }
+    :root { --primary: red; --background: yellow; }
+
+    /* Page chrome (these SHOULD apply to host page only) */
+    html, body { margin: 0; padding: 0; min-height: 100vh; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; background: linear-gradient(135deg, #f5f5f0, #e8e4dc); padding: 0; }
+    .page { max-width: 760px; margin: 0 auto; padding: 64px 24px 200px; }
+    .page h1 { font-size: 28px; margin: 0 0 8px; color: #18230f; line-height: 1.2; }
+    .page p { color: #4a5043; line-height: 1.55; max-width: 60ch; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+    .controls .btn {
+      padding: 8px 14px !important;
+      background: #14532d !important;
+      color: white !important;
+      border: 1px solid #14532d !important;
+      border-radius: 8px !important;
+      font: inherit !important;
+      font-size: 14px !important;
+      cursor: pointer;
+    }
+    .controls .btn:hover { background: #163300 !important; }
+    .meta {
+      margin-top: 32px; padding: 16px; border-radius: 12px;
+      background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.08);
+      font-size: 13px; color: #4a5043;
+    }
+    code { background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1>FlakersStudio widget — local test harness</h1>
+    <p>
+      This page deliberately defines hostile global styles (forced
+      <code>box-sizing: content-box</code>, magenta dashed buttons, Comic Sans).
+      If the widget still renders cleanly, shadow-DOM isolation is working.
+    </p>
+    <p>
+      Network requests to <code>/api/v1/public/chat</code> and
+      <code>/api/v1/public/widget-config/*</code> are intercepted via a
+      <code>fetch()</code> shim below — no backend required.
+    </p>
+
+    <div class="controls">
+      <button class="btn" onclick="window.__widget.open()">Open</button>
+      <button class="btn" onclick="window.__widget.close()">Close</button>
+      <button class="btn" onclick="window.__widget.toggle()">Toggle</button>
+      <button class="btn" onclick="window.__widget.send('What governance rules apply?')">Send sample</button>
+      <button class="btn" onclick="window.__widget.send('refuse: secret roadmap')">Send sample (refuse)</button>
+      <button class="btn" onclick="localStorage.clear(); location.reload();">Reset thread</button>
+    </div>
+
+    <div class="meta">
+      <strong>Widget bundle:</strong> <code>../dist/flakers-widget.iife.js</code><br />
+      <strong>Assistant ID:</strong> <code>00000000-0000-0000-0000-000000000001</code><br />
+      <strong>Tenant ID:</strong> <code>00000000-0000-0000-0000-0000000000aa</code><br />
+      <strong>API key:</strong> <code>test-key</code> (mocked)
+    </div>
+
+    <p style="margin-top:64px; font-size:12px; color:#7a7a70;">
+      Build the widget with <code>npm run build</code> from
+      <code>frontend/widget/</code> before opening this page.
+    </p>
+  </main>
+
+  <!-- =================================================================
+       MOCK BACKEND
+       Intercepts the two endpoints the widget calls:
+         POST /api/v1/public/chat
+         GET  /api/v1/public/widget-config/{assistant_id}
+       and returns deterministic, plausible PublicChatResponse payloads.
+       ================================================================= -->
+  <script>
+  (function () {
+    const origFetch = window.fetch.bind(window);
+    let sessionCounter = 0;
+
+    function jsonResponse(body, init) {
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+        ...init,
+      });
+    }
+
+    window.fetch = async function (input, init) {
+      const url = typeof input === "string" ? input : input.url;
+
+      // ----- widget-config -----
+      if (/\/api\/v1\/public\/widget-config\//.test(url)) {
+        return jsonResponse({
+          assistant_id: "00000000-0000-0000-0000-000000000001",
+          tenant_id: "00000000-0000-0000-0000-0000000000aa",
+          widget_config: {
+            enabled: true,
+            assistant_name: "Atlas",
+            title: "Ask Atlas",
+            subtitle: "Governed answers · backed by sources",
+            greeting: "Hi! I'm Atlas. Ask me anything about FlakersStudio.",
+            placeholder: "Ask Atlas...",
+            launcher_label: "Open chat",
+            position: "bottom-right",
+            bubble_size: "md",
+            show_sources: true,
+            show_governance: true,
+            show_powered_by: true,
+          },
+        });
+      }
+
+      // ----- public chat -----
+      if (/\/api\/v1\/public\/chat$/.test(url) && (init?.method || "").toUpperCase() === "POST") {
+        let body = {};
+        try { body = JSON.parse(init.body); } catch {}
+        const msg = String(body.user_message || "");
+        await new Promise((r) => setTimeout(r, 600));
+        sessionCounter++;
+
+        if (/refuse|secret|roadmap/i.test(msg)) {
+          return jsonResponse({
+            decision: "refuse",
+            answer: null,
+            reason: "I can't share information about unreleased product roadmaps. Try asking about our public docs or pricing.",
+            sources: [],
+            rules_applied: ["block-internal-roadmap", "scope-public-only"],
+            allowed_scope: ["public-docs"],
+            session_id: body.session_id || ("s_" + Date.now()),
+            processing_time_ms: 412 + Math.floor(Math.random() * 100),
+          });
+        }
+
+        return jsonResponse({
+          decision: "answer",
+          answer:
+            "FlakersStudio applies governance rules to every response. " +
+            "When a rule matches, the assistant either grounds its answer " +
+            "in approved sources (like the ones below) or politely refuses. " +
+            "You asked: \"" + msg + "\".",
+          reason: null,
+          sources: [
+            { title: "FlakersStudio docs — Governance overview", url: "https://flakersstudio.com/docs/governance", intent: "policy" },
+            { title: "Phase 0 design tokens", url: "https://flakersstudio.com/design-system", intent: "design" },
+            { title: "Public chat API reference", url: "https://flakersstudio.com/docs/api/public-chat", intent: "api" },
+            { title: "Tenant onboarding guide", url: "https://flakersstudio.com/docs/onboarding", intent: "guide" },
+          ],
+          rules_applied: ["scope-allowed-domains", "cite-required", "tone-professional"],
+          allowed_scope: ["docs", "marketing"],
+          session_id: body.session_id || ("s_" + Date.now()),
+          processing_time_ms: 712 + Math.floor(Math.random() * 200),
+        });
+      }
+
+      return origFetch(input, init);
+    };
+  })();
+  </script>
+
+  <!-- Load the built widget -->
+  <script src="../dist/flakers-widget.iife.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      window.__widget = window.FlakersStudioWidget.init({
+        assistantId: "00000000-0000-0000-0000-000000000001",
+        tenantId: "00000000-0000-0000-0000-0000000000aa",
+        apiKey: "test-key",
+        apiBaseUrl: "", // mock fetch shim handles routing
+        position: "bottom-right",
+        bubbleSize: "md",
+        showSources: true,
+        showGovernance: true,
+      });
+    });
+  </script>
+</body>
+</html>
