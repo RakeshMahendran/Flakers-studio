@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default function DashboardLayout({
   children,
@@ -13,7 +14,7 @@ export default function DashboardLayout({
 
   useEffect(() => {
     // Check if user is authenticated
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const user = localStorage.getItem("user");
       if (!user) {
         router.push("/login");
@@ -28,5 +29,5 @@ export default function DashboardLayout({
     return null;
   }
 
-  return <>{children}</>;
+  return <AppShell>{children}</AppShell>;
 }
