@@ -72,6 +72,11 @@ class IngestionURL(Base):
     # Metadata
     scraped_at = Column(DateTime(timezone=True))
     processed_at = Column(DateTime(timezone=True))
+
+    # Rich metadata extracted at scrape time (year, month, categories, tags,
+    # event ACF fields, …). Values are flat (str/int/bool/list[str]) so they
+    # can be forwarded directly to the Qdrant point payload.
+    extracted_metadata = Column(JSONB, nullable=False, server_default="{}", default=dict)
     
     # Error Tracking
     failure_reason = Column(Text)

@@ -154,7 +154,8 @@ class ContentDiscoveryService:
                         word_count=word_count,
                         raw_content=page.content,
                         content_length=len(page.content),
-                        scraped_at=page.scraped_at
+                        scraped_at=page.scraped_at,
+                        extracted_metadata=getattr(page, "extracted_metadata", {}) or {},
                     )
                     db.add(url_record)
                 
