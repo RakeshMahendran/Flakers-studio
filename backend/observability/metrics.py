@@ -37,6 +37,17 @@ ingestion_duration_seconds = Histogram(
     ["status"],
 )
 
+fast_intent_hits_total = Counter(
+    "flakers_fast_intent_hits_total",
+    "Total fast-path intent classifications that short-circuited retrieval",
+    ["intent"],
+)
+
+
+def observe_fast_intent_hit(intent: str) -> None:
+    """Record a fast-path hit so we can track LLM-call savings."""
+    fast_intent_hits_total.labels(intent=intent).inc()
+
 
 def observe_chat(endpoint: str, decision: str, duration_seconds: float) -> None:
     chat_requests_total.labels(endpoint=endpoint, decision=decision).inc()
