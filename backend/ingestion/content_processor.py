@@ -3,19 +3,47 @@ Content Processing Service
 Handles content chunking, intent classification, and preparation for embedding
 Uses tiktoken for tokenization as per pipeline spec
 """
-import re
+import asyncio
+import concurrent.futures
 import hashlib
 import logging
-from typing import List, Dict, Any, Optional
+import re
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import tiktoken
 
+from backend.config.settings import settings
+from backend.ingestion.semantic_chunker import (
+    SemanticChunker,
+    is_corrupted_chunk,
+)
 from backend.ingestion.web_scraper import ScrapedPage
 from backend.models.content import ContentIntent
-from backend.config.settings import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _run_async(coro):
+    """Run an async coroutine to completion from a sync caller.
+
+    If we are NOT inside a running event loop (CLI scripts, sync API
+    callers, unit tests), we use ``asyncio.run`` directly. If we ARE
+    inside a running loop (FastAPI sync route handlers cannot be — but
+    a thread-pool worker invoked from one can), we hop to a worker
+    thread that owns its own loop. This avoids the
+    ``RuntimeError: asyncio.run() cannot be called from a running event
+    loop`` foot-gun without forcing every caller of
+    ``process_scraped_pages`` to become async.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        return ex.submit(asyncio.run, coro).result()
 
 @dataclass
 class ContentChunk:
@@ -44,10 +72,10 @@ class ContentProcessor:
     - Metadata extraction
     """
     
-    def __init__(self):
+    def __init__(self, semantic_chunker: Optional[SemanticChunker] = None):
         self.max_chunk_size = settings.MAX_CONTENT_LENGTH
         self.chunk_overlap = settings.CHUNK_OVERLAP
-        
+
         # Initialize tiktoken encoder for the target embedding model
         # Using cl100k_base encoding (for text-embedding-3-* models)
         try:
@@ -56,6 +84,23 @@ class ContentProcessor:
         except Exception as e:
             logger.error(f"Failed to initialize tiktoken: {str(e)}")
             raise
+
+        # Build (or accept) a semantic chunker instance. Single instance
+        # per ContentProcessor so the in-memory embedding cache is
+        # shared across all pages of an ingestion run.
+        if semantic_chunker is not None:
+            self.semantic_chunker = semantic_chunker
+        elif settings.USE_SEMANTIC_CHUNKING:
+            self.semantic_chunker = SemanticChunker(
+                target_min=settings.SEMANTIC_CHUNK_TARGET_MIN,
+                target_max=settings.SEMANTIC_CHUNK_TARGET_MAX,
+                overlap_tokens=settings.SEMANTIC_CHUNK_OVERLAP,
+                similarity_threshold=settings.SEMANTIC_CHUNK_SIMILARITY_THRESHOLD,
+                max_sentences_per_page=settings.SEMANTIC_CHUNK_MAX_SENTENCES_PER_PAGE,
+                tokenizer=self.tokenizer,
+            )
+        else:
+            self.semantic_chunker = None
         
     def _clean_text(self, text: str) -> str:
         """Clean and normalize text content"""
@@ -74,36 +119,63 @@ class ContentProcessor:
         return text.strip()
     
     def _chunk_text(self, text: str) -> List[str]:
+        """Split text into chunks.
+
+        When ``settings.USE_SEMANTIC_CHUNKING`` is enabled and a semantic
+        chunker is available, defers to ``SemanticChunker.chunk`` (which
+        already filters corrupted chunks). Otherwise falls back to the
+        legacy fixed-token chunker preserved in ``_legacy_chunk_text``.
+
+        Corruption filtering: chunks that match
+        ``is_corrupted_chunk`` heuristics are dropped before they ever
+        reach the embedding service.
         """
-        Split text into overlapping chunks using tiktoken tokenization
-        As per spec: tokenize using tiktoken for the target embedding model
-        """
-        # Tokenize the entire text
+        if not text or not text.strip():
+            return []
+
+        if settings.USE_SEMANTIC_CHUNKING and self.semantic_chunker is not None:
+            try:
+                chunks = _run_async(self.semantic_chunker.chunk(text))
+            except Exception as e:
+                logger.warning(
+                    "Semantic chunking failed (%s); falling back to "
+                    "fixed-token chunker",
+                    e,
+                )
+                chunks = self._legacy_chunk_text(text)
+        else:
+            chunks = self._legacy_chunk_text(text)
+
+        # Defensive final filter (legacy path doesn't guarantee this).
+        return [c for c in chunks if not is_corrupted_chunk(c)]
+
+    def _legacy_chunk_text(self, text: str) -> List[str]:
+        """Original fixed-token chunker, kept as a fallback path."""
         tokens = self.tokenizer.encode(text)
-        
+
         if len(tokens) <= self.max_chunk_size:
             return [text]
-        
+
         chunks = []
         start = 0
-        
+
         while start < len(tokens):
             end = start + self.max_chunk_size
-            
+
             # Get token slice
             chunk_tokens = tokens[start:end]
-            
+
             # Decode back to text
             chunk_text = self.tokenizer.decode(chunk_tokens)
-            
+
             if chunk_text.strip():
                 chunks.append(chunk_text.strip())
-            
+
             # Move start position with overlap
             start = end - self.chunk_overlap
             if start >= len(tokens):
                 break
-        
+
         return chunks
     
     def _calculate_content_quality(self, content: str) -> float:
