@@ -9,6 +9,13 @@ import {
 } from "lucide-react";
 import { User, Assistant } from "../app";
 import { generativeComponents } from "@/components/tambo/generative";
+import {
+  DecisionRenderer,
+  type GovernanceDecision,
+  type GovernanceRuleId,
+  type GovernanceSource,
+  type RuleEvaluation,
+} from "@/components/governance";
 
 interface ChatMessage {
   id: string;
@@ -473,20 +480,59 @@ export function ChatInterface({ user, assistant, onBack }: ChatInterfaceProps) {
 }
 
 // Message Bubble Component
+/* ----------------------------------------------------------------- */
+/* Legacy ChatMessage → GovernanceDecision adapter                    */
+/* The current /api/chat/query response only carries `decision`,       */
+/* `sources` (url/title/intent), and `rules_applied` (string[]). The   */
+/* DecisionRenderer designs for the richer target shape; we coerce     */
+/* what we have today and leave optional fields undefined.             */
+/* ----------------------------------------------------------------- */
+function chatMessageToDecision(message: ChatMessage): GovernanceDecision | null {
+  if (message.type !== "assistant" || !message.decision) return null;
+
+  const sources: GovernanceSource[] = (message.sources ?? []).map((s, i) => ({
+    id: `${message.id}-src-${i}`,
+    title: s.title || s.url,
+    url: s.url,
+    snippet: "",
+    relevanceScore: 0,
+    intent: s.intent,
+  }));
+
+  const ruleEvaluations: RuleEvaluation[] = (message.rulesApplied ?? []).map(
+    (r) => ({
+      // Legacy backend lower-cases rule names — uppercase to match the
+      // canonical GovernanceRuleId set; unknown rules fall through.
+      id: r.toUpperCase() as GovernanceRuleId,
+      status: message.decision === "ANSWER" ? "passed" : "failed",
+    }),
+  );
+
+  return {
+    decision: message.decision,
+    answer: message.decision === "ANSWER" ? message.content : undefined,
+    refusalReason: message.decision === "REFUSE" ? message.content : undefined,
+    refusalCode: message.reason as GovernanceDecision["refusalCode"],
+    sources,
+    ruleEvaluations,
+    processingTimeMs: message.processingTimeMs,
+  };
+}
+
 const MessageBubble: React.FC<{ message: ChatMessage; onToggleExplanation: () => void }> = ({ message, onToggleExplanation }) => {
   // Render generative UI component if specified
   const renderGenerativeComponent = () => {
     if (!message.component) return null;
-    
+
     const componentType = message.component.type;
     const componentDef = generativeComponents.find(c => c.name === componentType);
     if (!componentDef) {
       console.warn(`Unknown component type: ${componentType}`);
       return null;
     }
-    
+
     const Component = componentDef.component as React.ComponentType<any>;
-    
+
     return (
       <div className="mt-4">
         <Component {...message.component.props} />
@@ -494,23 +540,32 @@ const MessageBubble: React.FC<{ message: ChatMessage; onToggleExplanation: () =>
     );
   };
 
+  // Use the new DecisionRenderer for governed assistant messages.
+  // Welcome / error / un-governed assistant messages fall through to the
+  // legacy bubble so we don't regress non-decision flows.
+  const decision = chatMessageToDecision(message);
+
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
     >
-      <div className={`max-w-[75%]`}>
-        <div className={`
-          p-6 rounded-3xl text-[15px] leading-7 shadow-sm
-          ${message.type === 'user' 
-            ? 'bg-blue-600 text-white rounded-br-none' 
-            : message.isRefusal 
-              ? 'bg-red-50 text-slate-800 border border-red-100 rounded-bl-none' 
-              : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'}
-        `}>
-          <p>{message.content}</p>
-        </div>
+      <div className={`max-w-[75%] w-full`}>
+        {decision ? (
+          <DecisionRenderer decision={decision} />
+        ) : (
+          <div className={`
+            p-6 rounded-3xl text-[15px] leading-7 shadow-sm
+            ${message.type === 'user'
+              ? 'bg-blue-600 text-white rounded-br-none'
+              : message.isRefusal
+                ? 'bg-red-50 text-slate-800 border border-red-100 rounded-bl-none'
+                : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'}
+          `}>
+            <p>{message.content}</p>
+          </div>
+        )}
 
         {/* Render Generative UI Component */}
         {renderGenerativeComponent()}
@@ -529,7 +584,7 @@ const MessageBubble: React.FC<{ message: ChatMessage; onToggleExplanation: () =>
           </div>
         )}
 
-        {message.type === 'assistant' && !message.isRefusal && (
+        {!decision && message.type === 'assistant' && !message.isRefusal && (
           <div className="mt-3 flex flex-wrap items-center gap-2 pl-2">
             {message.citations?.map((cite, i) => (
               <a key={i} href={cite.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-medium text-blue-600 hover:border-blue-300 hover:shadow-sm transition-all">
@@ -538,7 +593,7 @@ const MessageBubble: React.FC<{ message: ChatMessage; onToggleExplanation: () =>
               </a>
             ))}
             {message.sources && message.sources.length > 0 && (
-              <button 
+              <button
                 onClick={onToggleExplanation}
                 className="ml-auto text-xs font-bold text-slate-400 hover:text-blue-600 flex items-center gap-1.5 transition-colors bg-white px-3 py-1.5 rounded-full border border-slate-200 hover:border-blue-200"
               >
@@ -548,8 +603,8 @@ const MessageBubble: React.FC<{ message: ChatMessage; onToggleExplanation: () =>
             )}
           </div>
         )}
-        
-        {message.isRefusal && (
+
+        {!decision && message.isRefusal && (
           <div className="mt-3 flex items-center gap-2 text-xs text-red-600 font-bold bg-red-50 px-3 py-1.5 rounded-full w-fit border border-red-100">
             <ShieldCheck className="w-3.5 h-3.5" />
             Governance: {message.reason || 'Out of Scope'}
