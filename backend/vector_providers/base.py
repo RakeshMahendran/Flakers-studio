@@ -15,6 +15,11 @@ class VectorSearchQuery:
     score_threshold: float = 0.7
     assistant_name: Optional[str] = None
     user_name: Optional[str] = None
+    # Optional payload filters extracted from the user's natural-language
+    # query (see ``backend.retrieval.filter_extractor``). Provider-agnostic
+    # at this layer — Qdrant translates this into a ``Filter``; other
+    # providers may ignore it. Empty / None means "no extra filter".
+    payload_filters: Optional[Dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass

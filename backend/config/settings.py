@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_VERSION: str = "2024-02-01"
     AZURE_OPENAI_DEPLOYMENT_NAME: str = "gpt-4"
     AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = "text-embedding-ada-002"
+
+    # LLM-based query filter extraction (feat/llm-filter-extraction).
+    # Uses a SEPARATE cheap deployment so we don't pay GPT-4 prices on
+    # every query just to infer "year=2024". Default falls back to the
+    # main deployment if the cheap one isn't configured.
+    ENABLE_FILTER_EXTRACTION: bool = True
+    FILTER_EXTRACTION_MODEL: str = "gpt-4o-mini"
+    FILTER_EXTRACTION_MAX_TOKENS: int = 300
+    FILTER_EXTRACTION_TIMEOUT_SECONDS: float = 4.0
     
     # Azure AI Studio Additional Config
     AZURE_AI_STUDIO_ENDPOINT: str = ""

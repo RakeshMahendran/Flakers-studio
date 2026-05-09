@@ -146,11 +146,38 @@ class QdrantVectorStore(VectorStore):
 
     async def search(self, query: VectorSearchQuery) -> List[Dict[str, Any]]:
         collection_name = build_collection_name(query.assistant_name, query.user_name)
+
+        # Build the query_filter. We always pin to ``assistant_id`` for
+        # tenant isolation. When ``query.payload_filters`` is non-empty
+        # we delegate to ``backend.retrieval.filter_extractor.build_qdrant_filter``
+        # so the structured-filter logic lives in one place. Imported
+        # lazily to avoid a circular import in tests that stub the
+        # vector store.
+        query_filter: Any
+        applied_keys: List[str] = []
+        if query.payload_filters:
+            try:
+                from backend.retrieval.filter_extractor import build_qdrant_filter
+
+                query_filter, applied_keys = build_qdrant_filter(
+                    assistant_id=query.assistant_id,
+                    filters=query.payload_filters,
+                )
+            except Exception:  # noqa: BLE001 — degrade to assistant-only filter
+                query_filter = {
+                    "must": [{"key": "assistant_id", "match": {"value": query.assistant_id}}]
+                }
+                applied_keys = []
+        else:
+            query_filter = {
+                "must": [{"key": "assistant_id", "match": {"value": query.assistant_id}}]
+            }
+
         try:
             search_result = self.client.search(
                 collection_name=collection_name,
                 query_vector=query.query_embedding,
-                query_filter={"must": [{"key": "assistant_id", "match": {"value": query.assistant_id}}]},
+                query_filter=query_filter,
                 limit=query.limit,
                 score_threshold=query.score_threshold,
             )

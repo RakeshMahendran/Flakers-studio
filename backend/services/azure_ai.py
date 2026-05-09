@@ -29,6 +29,13 @@ class AzureAIService:
         )
         self.deployment_name = settings.AZURE_OPENAI_DEPLOYMENT_NAME
         self.embedding_deployment = settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+        # Cheap deployment used for non-customer-facing utility calls
+        # (filter extraction, query rewriting, etc.). Falls back to the
+        # main deployment if the cheap one isn't configured.
+        self.filter_extraction_model = (
+            getattr(settings, "FILTER_EXTRACTION_MODEL", "")
+            or self.deployment_name
+        )
 
     async def generate_response(
         self,
@@ -102,6 +109,77 @@ class AzureAIService:
         except Exception as e:
             logger.error(f"Azure AI error: {str(e)}")
             raise Exception(f"AI service error: {str(e)}")
+
+    async def extract_filters(
+        self,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int = 300,
+        temperature: float = 0.0,
+        tenant_id: str | None = None,
+        assistant_id: str | None = None,
+    ) -> Dict[str, Any]:
+        """Cheap deployment call for query-filter extraction.
+
+        This is a separate code path from ``generate_response`` so the
+        filter-extraction model can be swapped (e.g. ``gpt-4o-mini``)
+        without touching customer-facing answer synthesis.
+
+        Returns the same shape as ``generate_response``: ``content`` plus
+        a ``usage`` dict. Errors are caught and surfaced as an empty
+        ``content`` so the caller can degrade gracefully to semantic-only
+        retrieval.
+        """
+        try:
+            t0 = time.perf_counter()
+            response = self.client.chat.completions.create(
+                model=self.filter_extraction_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=0.9,
+            )
+            latency_ms = (time.perf_counter() - t0) * 1000
+
+            content = response.choices[0].message.content or ""
+            result = {
+                "content": content,
+                "usage": {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                    "model": self.filter_extraction_model,
+                },
+                "finish_reason": response.choices[0].finish_reason,
+            }
+
+            log_token_usage(
+                tenant_id=tenant_id,
+                assistant_id=assistant_id,
+                task_type="filter_extraction",
+                model=self.filter_extraction_model,
+                vendor="azure_openai",
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                total_tokens=response.usage.total_tokens,
+                latency_ms=round(latency_ms, 1),
+                metadata={"component": "azure_ai.extract_filters"},
+            )
+
+            logger.info(
+                "Filter-extraction call ok: tokens=%s latency_ms=%.1f model=%s",
+                response.usage.total_tokens,
+                latency_ms,
+                self.filter_extraction_model,
+            )
+            return result
+
+        except Exception as e:  # noqa: BLE001 — degrade gracefully
+            logger.warning("Filter extraction call failed (degrading to semantic-only): %s", e)
+            return {"content": "", "usage": {}, "finish_reason": "error", "error": str(e)}
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for text chunks using text-embedding-3-large"""
