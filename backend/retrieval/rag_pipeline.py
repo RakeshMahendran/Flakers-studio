@@ -20,6 +20,10 @@ from backend.models.project import Project
 from backend.services.azure_ai import AzureAIService
 from backend.services.embeddings import EmbeddingService
 from backend.retrieval.retrieval_service import RetrievalService
+from backend.retrieval.prompt_builder import (
+    detect_response_mode,
+    get_synthesis_system_prompt,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -138,42 +142,16 @@ Guidelines:
                     content = msg.user_message or msg.assistant_response or ""
                     conversation_context += f"{role}: {content[:200]}\n"
 
-            system_prompt = f"""You are an AI assistant for {assistant.name}.
-
-Voice & Style:
-- Sound like a helpful, knowledgeable colleague - warm, genuine, and conversational
-- Use natural, human language with contractions (e.g., "I'm", "we're", "you'll")
-- Avoid corporate jargon and overly formal phrases
-- Keep it conversational and helpful, like talking to a friend
-
-Conversation History Awareness - CRITICAL:
-- You have access to the conversation history below
-- If there's conversation history, this is a FOLLOW-UP question - don't greet again
-- For follow-up questions, provide direct answers without introductory pleasantries
-- Reference previous exchanges naturally when relevant
-- Maintain conversation continuity and context
-
-Core Behavioral Rules:
-1. Sound natural and conversational
-2. Prioritize information from the provided context when available
-3. Use conversation history to maintain context and provide coherent responses
-4. For follow-up questions, provide direct answers without repetitive greetings
-5. Do not invent specific details not supported by context
-6. When information isn't available, respond naturally
-7. Vary your responses
-8. Be helpful and suggest alternatives when needed
-
-Off-Topic Query Handling:
-- You are ONLY an assistant for {assistant.name}
-- If the user asks about topics completely unrelated to {assistant.site_url}, explain that scope clearly.
-
-Retrieved Context:
-{context_text}
-{conversation_context}
-
-User Query: {user_message}
-
-Provide a helpful, natural response based on the context above."""
+            response_mode = detect_response_mode(user_message)
+            base_system_prompt = get_synthesis_system_prompt(
+                assistant_name=assistant.name,
+                mode=response_mode,
+            )
+            system_prompt = (
+                f"{base_system_prompt}\n\n"
+                f"Retrieved Context:\n{context_text}"
+                f"{conversation_context}"
+            )
 
             ai_response = await self.azure_service.generate_response(
                 system_prompt=system_prompt,
