@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from backend.config.settings import settings
 from backend.retrieval.prompt_builder import get_filter_extraction_system_prompt
 from backend.services.azure_ai import AzureAIService
+from backend.cache.decorators import cached_filter_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -398,16 +399,27 @@ def _build_user_message(query: str, schema: Dict[str, str]) -> str:
 
 
 class FilterExtractor:
-    """LLM-backed structured-filter extractor with in-memory LRU cache."""
+    """LLM-backed structured-filter extractor with Redis caching.
+
+    Caching is handled by the @cached_filter_extraction decorator with
+    proper tenant isolation. Internal LRU cache has been removed to
+    prevent double-caching and cache inconsistency issues.
+    """
 
     def __init__(
         self,
         azure_service: Optional[AzureAIService] = None,
-        cache: Optional[_LRUCache] = None,
+        cache: Optional[_LRUCache] = None,  # Deprecated: kept for backward compatibility
     ) -> None:
         self.azure_service = azure_service or AzureAIService()
-        self._cache = cache if cache is not None else _GLOBAL_CACHE
+        # Internal cache deprecated - decorator handles caching with tenant isolation
+        if cache is not None:
+            logger.warning(
+                "FilterExtractor internal cache is deprecated. "
+                "Caching is now handled by @cached_filter_extraction decorator."
+            )
 
+    @cached_filter_extraction()
     async def extract(
         self,
         query: str,
@@ -423,18 +435,18 @@ class FilterExtractor:
           - the query is blank,
           - the LLM call fails or returns invalid JSON.
 
-        Cached per-process by ``sha256(query)``.
+        IMPORTANT: This method is cached by the @cached_filter_extraction
+        decorator at the Redis level. The internal _GLOBAL_CACHE (LRU) has
+        been REMOVED to prevent double-caching and cache inconsistency.
+        The decorator handles all caching with proper tenant isolation.
         """
         if not getattr(settings, "ENABLE_FILTER_EXTRACTION", True):
             return FilterResult()
         if not query or not query.strip():
             return FilterResult()
 
-        key = _cache_key(query)
-        cached = self._cache.get(key)
-        if cached is not None:
-            logger.debug("Filter-extractor cache hit: key=%s", key[:12])
-            return cached
+        # NOTE: Internal LRU cache removed - decorator handles all caching
+        # with proper tenant isolation via Redis + LRU fallback
 
         schema = assistant_metadata_schema or DEFAULT_METADATA_SCHEMA
         system_prompt = get_filter_extraction_system_prompt()
@@ -463,7 +475,6 @@ class FilterExtractor:
             return result
 
         result = self._parse(ai_response.get("content", ""))
-        self._cache.set(key, result)
         return result
 
     # ------------------------------------------------------------------

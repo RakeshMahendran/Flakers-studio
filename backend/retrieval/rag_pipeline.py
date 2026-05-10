@@ -90,7 +90,9 @@ class RAGPipeline:
             # sum. ``return_exceptions=True`` keeps a filter-extraction
             # failure from killing the whole request — we degrade to
             # semantic-only retrieval instead.
-            embed_coro = self.embedding_service.embed_text(user_message)
+            embed_coro = self.embedding_service.embed_text(
+                user_message, tenant_id=str(assistant.tenant_id)
+            )
             filter_coro = self._run_filter_extraction(
                 user_message=user_message,
                 assistant=assistant,
@@ -211,6 +213,8 @@ class RAGPipeline:
                         user_message=user_message,
                         temperature=0.6,
                         max_tokens=200,
+                        tenant_id=str(assistant.tenant_id),
+                        assistant_id=str(assistant.id),
                     )
                     answer = ai_response["content"]
                 else:
@@ -229,6 +233,8 @@ Guidelines:
                         user_message=user_message,
                         temperature=0.7,
                         max_tokens=300,
+                        tenant_id=str(assistant.tenant_id),
+                        assistant_id=str(assistant.id),
                     )
                     answer = ai_response["content"]
 
@@ -288,6 +294,8 @@ Guidelines:
                 user_message=user_message,
                 temperature=0.3,
                 max_tokens=800,
+                tenant_id=str(assistant.tenant_id),
+                assistant_id=str(assistant.id),
             )
             answer = self.validate_and_clean_response(ai_response["content"], assistant.name)
 
