@@ -4,7 +4,9 @@ import { useState } from "react";
 import { LoginScreen } from "./screens/login-screen";
 import { DashboardScreen } from "./screens/dashboard-screen";
 import { AssistantCreationFlow } from "./flows/assistant-creation-flow";
-import { ChatInterface } from "./screens/chat-interface";
+// Legacy `chat-interface.tsx` is deprecated — see the file header. The
+// canonical chat surface is `chat-interface-tambo.tsx` and is the only
+// chat screen rendered by this app.
 import { ChatInterfaceTambo } from "./screens/chat-interface-tambo";
 import { AssistantReviewScreen } from "./screens/assistant-review-screen";
 

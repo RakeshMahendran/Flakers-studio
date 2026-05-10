@@ -304,11 +304,27 @@ function SourceChip({
 }) {
   const host = React.useMemo(() => {
     try {
-      return new URL(source.url).host.replace(/^www\./, "");
+      const url = new URL(source.url);
+      // SECURITY: Only allow http/https protocols
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        return 'Invalid URL';
+      }
+      return url.host.replace(/^www\./, "");
     } catch {
-      return source.url;
+      return 'Invalid URL';
     }
   }, [source.url]);
+
+  // SECURITY: Validate favicon URL
+  const safeFaviconUrl = React.useMemo(() => {
+    if (!source.faviconUrl) return null;
+    try {
+      const url = new URL(source.faviconUrl);
+      return ['http:', 'https:', 'data:'].includes(url.protocol) ? source.faviconUrl : null;
+    } catch {
+      return null;
+    }
+  }, [source.faviconUrl]);
 
   const truncated =
     source.title.length > 36
@@ -338,10 +354,10 @@ function SourceChip({
       title={`${source.title} · ${host}`}
       aria-label={`Open source: ${source.title}`}
     >
-      {source.faviconUrl ? (
+      {safeFaviconUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={source.faviconUrl}
+          src={safeFaviconUrl}
           alt=""
           className="h-3.5 w-3.5 rounded-sm"
           aria-hidden
