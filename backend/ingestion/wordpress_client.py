@@ -19,6 +19,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
+from backend.ingestion.metadata_extractor import extract_metadata
 from backend.ingestion.web_scraper import ScrapedPage
 
 logger = logging.getLogger(__name__)
@@ -435,6 +436,21 @@ class WordPressClient:
             except Exception:
                 pass
 
+        # Rich metadata (date, categories, ACF event fields, …) for downstream
+        # filtered retrieval. Failure here must never break ingestion.
+        try:
+            extracted = extract_metadata(item, content_type, url)
+        except Exception as exc:  # pragma: no cover — defensive
+            # Log at WARNING level with context for production debugging
+            item_id = item.get("id", "unknown")
+            acf_keys = list(item.get("acf", {}).keys()) if isinstance(item.get("acf"), dict) else []
+            logger.warning(
+                "Metadata extraction failed for %s (WP ID: %s, ACF keys: %s): %s",
+                url, item_id, acf_keys, exc,
+                exc_info=True,
+            )
+            extracted = {}
+
         return ScrapedPage(
             url=url,
             title=title,
@@ -445,6 +461,7 @@ class WordPressClient:
             content_type=content_type,
             scraped_at=datetime.utcnow(),
             content_hash=chash,
+            extracted_metadata=extracted,
         )
 
     def _emit_progress(self, endpoint_name: str, page: int, total_so_far: int) -> None:

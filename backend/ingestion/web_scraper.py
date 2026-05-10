@@ -8,7 +8,7 @@ import hashlib
 import re
 from typing import List, Dict, Any, Optional, Set, Callable
 from urllib.parse import urljoin, urlparse, urlunparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from selenium import webdriver
@@ -39,6 +39,9 @@ class ScrapedPage:
     content_type: str
     scraped_at: datetime
     content_hash: str
+    # Rich metadata extracted from the source (e.g. WordPress REST API).
+    # Flat dict — values are str/int/bool/list[str] only — Qdrant friendly.
+    extracted_metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class ScrapingConfig:

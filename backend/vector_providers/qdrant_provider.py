@@ -17,6 +17,33 @@ qdrant_client: Optional[QdrantClient] = None
 _vector_store: Optional["QdrantVectorStore"] = None
 
 
+# Whitelist of extracted-metadata keys that are promoted to top-level payload
+# fields so Qdrant can filter on them directly (e.g. ``year`` = 2024,
+# ``category_ids`` contains 12). All values are flat — str/int/bool/list[str].
+# Keeping this as an explicit list rather than a blind copy-everything keeps
+# the payload schema predictable and easy to add indexes for.
+_PROMOTED_METADATA_KEYS = (
+    # Core post/page
+    "year",
+    "month",
+    "date",
+    "post_id",
+    "type",
+    "wp_type",
+    "category_ids",
+    "tag_ids",
+    "slug",
+    "author_id",
+    # Event ACF
+    "is_event",
+    "event_start_date",
+    "event_end_date",
+    "event_year",
+    "event_month",
+    "event_location",
+)
+
+
 def sanitize_collection_component(value: str) -> str:
     return "".join(char.lower() if char.isalnum() else "_" for char in value)
 
@@ -70,6 +97,30 @@ class QdrantVectorStore(VectorStore):
                 )
             except Exception:
                 pass
+
+        # Create indexes for rich metadata fields to enable efficient filtering
+        # on year, categories, event dates, etc. Qdrant requires indexes for fast
+        # filtering on large collections (>10k points).
+        _metadata_indexes = [
+            ("year", PayloadSchemaType.INTEGER),
+            ("month", PayloadSchemaType.INTEGER),
+            ("category_ids", PayloadSchemaType.KEYWORD),
+            ("tag_ids", PayloadSchemaType.KEYWORD),
+            ("is_event", PayloadSchemaType.BOOL),
+            ("event_year", PayloadSchemaType.INTEGER),
+            ("event_month", PayloadSchemaType.INTEGER),
+        ]
+        for field_name, field_type in _metadata_indexes:
+            try:
+                self.client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name=field_name,
+                    field_schema=field_type,
+                )
+            except Exception:
+                # Index may already exist or collection may be in use - continue
+                pass
+
         return collection_name
 
     async def upsert(
@@ -87,6 +138,7 @@ class QdrantVectorStore(VectorStore):
         for chunk, embedding in zip(chunks, embeddings):
             point_id = str(uuid.uuid4())
             point_ids.append(point_id)
+            chunk_metadata = chunk.get("metadata", {}) or {}
             payload = {
                 "assistant_id": assistant_id,
                 "assistant_name": assistant_name or "unknown",
@@ -102,8 +154,15 @@ class QdrantVectorStore(VectorStore):
                 "is_sensitive": chunk.get("is_sensitive", False),
                 "chunk_index": chunk.get("chunk_index", 0),
                 "content_hash": chunk.get("content_hash", ""),
-                "metadata": chunk.get("metadata", {}),
+                "metadata": chunk_metadata,
             }
+            # Promote rich metadata keys (year, categories, event_start_date, …)
+            # to the top level of the payload so Qdrant filters can target them
+            # directly without a nested-key path. Keep them inside ``metadata``
+            # too for backward-compat with existing consumers.
+            for key in _PROMOTED_METADATA_KEYS:
+                if key in chunk_metadata and key not in payload:
+                    payload[key] = chunk_metadata[key]
             points.append(PointStruct(id=point_id, vector=embedding, payload=payload))
 
         self.client.upsert(collection_name=collection_name, points=points)

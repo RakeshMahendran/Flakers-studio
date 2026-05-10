@@ -195,7 +195,8 @@ class IngestionService:
                             images=[],
                             content_type=url_record.content_type or "general",
                             scraped_at=url_record.scraped_at or datetime.utcnow(),
-                            content_hash=""
+                            content_hash="",
+                            extracted_metadata=dict(url_record.extracted_metadata or {}),
                         )
                         
                         # Process into chunks
