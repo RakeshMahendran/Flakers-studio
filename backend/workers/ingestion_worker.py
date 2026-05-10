@@ -56,21 +56,21 @@ async def run_worker_celery(poll_interval: float = 5.0):
             # Enqueue each job to Celery
             for job in jobs:
                 try:
-                    # Mark as queued to prevent duplicate enqueueing
+                    # Enqueue to Celery FIRST (before DB update to avoid lost jobs)
+                    task = run_ingestion_job.delay(str(job.id))
+
+                    # Mark as queued only after successful enqueue
                     job.current_stage = "queued_to_celery"
                     await db.commit()
 
-                    # Enqueue to Celery
-                    task = run_ingestion_job.delay(str(job.id))
                     logger.info(
                         f"[Celery Mode] Enqueued job {job.id} to Celery (task_id={task.id})"
                     )
 
                 except Exception as e:
                     logger.error(f"[Celery Mode] Failed to enqueue job {job.id}: {str(e)}")
-                    # Reset stage so it can be retried
-                    job.current_stage = "discovery_complete"
-                    await db.commit()
+                    await db.rollback()  # Rollback to keep stage as discovery_complete
+                    # Job will be retried on next poll
 
         await asyncio.sleep(poll_interval)
 

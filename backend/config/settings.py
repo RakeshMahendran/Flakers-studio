@@ -104,6 +104,11 @@ class Settings(BaseSettings):
                     "FATAL: AZURE_OPENAI_API_KEY is not set. "
                     "Azure OpenAI credentials are required for non-development environments."
                 )
+            if self.USE_CELERY and not self.REDIS_URL:
+                raise RuntimeError(
+                    "FATAL: USE_CELERY is True but REDIS_URL is not set. "
+                    "Redis is required when Celery task queue is enabled."
+                )
 
 settings = Settings()
 settings.validate_for_production()

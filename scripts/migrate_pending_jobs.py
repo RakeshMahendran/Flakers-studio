@@ -67,12 +67,13 @@ async def migrate_pending_jobs(dry_run: bool = False):
                     )
                     enqueued_count += 1
                 else:
-                    # Mark as queued to prevent duplicate enqueueing
+                    # Enqueue to Celery FIRST (before DB update to avoid lost jobs)
+                    task = run_ingestion_job.delay(job_id)
+
+                    # Mark as queued only after successful enqueue
                     job.current_stage = "queued_to_celery"
                     await db.commit()
 
-                    # Enqueue to Celery
-                    task = run_ingestion_job.delay(job_id)
                     logger.info(
                         f"Enqueued job {job_id} to Celery (task_id={task.id}, "
                         f"assistant={assistant_id}, tenant={tenant_id[:8]})"
@@ -80,13 +81,13 @@ async def migrate_pending_jobs(dry_run: bool = False):
                     enqueued_count += 1
 
             except Exception as e:
-                logger.error(f"Failed to enqueue job {job.id}: {str(e)}")
+                logger.error(f"Failed to enqueue job {job.id}: {str(e)}", exc_info=True)
                 failed_count += 1
 
                 if not dry_run:
-                    # Reset stage so it can be retried
-                    job.current_stage = "discovery_complete"
-                    await db.commit()
+                    # Rollback to keep stage as discovery_complete
+                    await db.rollback()
+                    # Job will be retried by polling worker
 
         logger.info(
             f"Migration complete: {enqueued_count} jobs enqueued, {failed_count} failed"

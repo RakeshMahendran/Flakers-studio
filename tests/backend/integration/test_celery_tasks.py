@@ -308,3 +308,25 @@ class TestCeleryIntegration:
             results = [task.get() for task in tasks]
             assert len(results) == 3
             assert all(r['status'] == 'error' for r in results)  # All fail due to non-existent jobs
+
+    @pytest.mark.asyncio
+    async def test_duplicate_job_enqueue_protection(self, test_job_data):
+        """Test that job status checks prevent duplicate processing."""
+        job_id = test_job_data['job_id']
+
+        # Mock already failed job
+        mock_job = MagicMock(spec=IngestionJob)
+        mock_job.id = job_id
+        mock_job.status = JobStatus.FAILED.value
+
+        with patch('backend.queue.tasks.AsyncSessionLocal') as mock_session:
+            mock_db = AsyncMock()
+            mock_session.return_value.__aenter__.return_value = mock_db
+            mock_db.get = AsyncMock(return_value=mock_job)
+
+            # Try to process already failed job
+            result = await run_ingestion_job.apply_async(args=[job_id]).get()
+
+            # Verify it was skipped
+            assert result['status'] == 'skipped'
+            assert result['reason'] == 'already_failed'

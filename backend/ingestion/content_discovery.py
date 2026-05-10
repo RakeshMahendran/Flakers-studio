@@ -142,18 +142,6 @@ class ContentDiscoveryService:
                     language = self.processor._detect_language(page.content)
                     word_count = self.processor._count_words(page.content)
                     
-                    # Validate extracted metadata before database insert
-                    raw_metadata = getattr(page, "extracted_metadata", {}) or {}
-                    try:
-                        from backend.ingestion.metadata_validator import validate_metadata, validate_metadata_size
-                        validated_metadata = validate_metadata(raw_metadata, strict=False)
-                        if not validate_metadata_size(validated_metadata):
-                            logger.warning(f"Metadata for {page.url} exceeds size limit, truncating")
-                            validated_metadata = {}
-                    except Exception as e:
-                        logger.warning(f"Metadata validation failed for {page.url}: {e}")
-                        validated_metadata = {}
-
                     # Store in database
                     url_record = IngestionURL(
                         job_id=job_id,
@@ -166,8 +154,7 @@ class ContentDiscoveryService:
                         word_count=word_count,
                         raw_content=page.content,
                         content_length=len(page.content),
-                        scraped_at=page.scraped_at,
-                        extracted_metadata=validated_metadata,
+                        scraped_at=page.scraped_at
                     )
                     db.add(url_record)
                 
@@ -188,8 +175,13 @@ class ContentDiscoveryService:
                         task = run_ingestion_job.delay(job_id)
                         logger.info(f"Job {job_id}: Enqueued to Celery for ingestion (task_id={task.id})")
                     except Exception as celery_error:
-                        logger.error(f"Job {job_id}: Failed to enqueue to Celery: {str(celery_error)}")
+                        logger.error(
+                            f"Job {job_id}: Failed to enqueue to Celery: {str(celery_error)}. "
+                            "Job will be picked up by polling worker as fallback.",
+                            exc_info=True
+                        )
                         # Don't fail the job - the polling worker will pick it up as fallback
+                        # This handles Redis connection failures gracefully
                 
         except Exception as e:
             logger.error(f"Job {job_id}: Discovery failed - {str(e)}", exc_info=True)

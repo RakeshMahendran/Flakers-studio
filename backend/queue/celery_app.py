@@ -3,6 +3,19 @@ Celery application factory for FlakersStudio background tasks.
 
 This module configures Celery to use Redis as both broker and result backend.
 Task results expire after 24 hours to prevent unbounded growth.
+
+Security Considerations:
+- JSON serialization only (prevents pickle-based code execution)
+- Task acknowledgment after completion (acks_late=True)
+- Task requeue on worker failure (reject_on_worker_lost=True)
+- Connection retry with backoff (broker_connection_retry=True)
+- Results are non-persistent to avoid Redis memory issues in production
+
+Scaling:
+- Worker concurrency: 4 (configurable via CLI)
+- Prefetch multiplier: 1 (one task per worker at a time)
+- Task time limits: 30 min hard, 25 min soft
+- Worker restart: after 1000 tasks (prevents memory leaks)
 """
 from celery import Celery
 from backend.config.settings import settings
@@ -32,7 +45,7 @@ celery_app.conf.update(
 
     # Result backend
     result_expires=86400,  # 24 hours
-    result_persistent=True,
+    result_persistent=False,  # Don't persist results to avoid Redis memory issues
 
     # Task routing
     task_routes={
@@ -56,6 +69,15 @@ celery_app.conf.update(
     broker_connection_retry_on_startup=True,
     broker_connection_retry=True,
     broker_connection_max_retries=10,
+
+    # Security settings
+    result_backend_transport_options={
+        'master_name': 'mymaster',
+    } if 'sentinel' in REDIS_URL else {},
+
+    # Task result settings
+    result_backend_max_retries=3,
+    result_chord_retry_interval=1.0,
 )
 
 logger.info(f"Celery app configured with broker: {REDIS_URL}")

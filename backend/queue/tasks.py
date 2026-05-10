@@ -33,7 +33,14 @@ class AsyncTask(Task):
         raise NotImplementedError
 
 
-@celery_app.task(bind=True, base=AsyncTask, name="ingestion.run_job", max_retries=0)
+@celery_app.task(
+    bind=True,
+    base=AsyncTask,
+    name="ingestion.run_job",
+    max_retries=0,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
 async def run_ingestion_job(self, job_id: str) -> dict:
     """
     Execute ingestion job asynchronously via Celery.
@@ -67,8 +74,20 @@ async def run_ingestion_job(self, job_id: str) -> dict:
                 logger.warning(f"[Celery] Job {job_id} already completed, skipping")
                 return {"status": "skipped", "reason": "already_completed"}
 
+            if job.status == JobStatus.FAILED.value:
+                logger.warning(f"[Celery] Job {job_id} already failed, skipping")
+                return {"status": "skipped", "reason": "already_failed"}
+
+            if job.status == JobStatus.CANCELLED.value:
+                logger.warning(f"[Celery] Job {job_id} already cancelled, skipping")
+                return {"status": "skipped", "reason": "already_cancelled"}
+
             if job.should_cancel():
-                logger.warning(f"[Celery] Job {job_id} cancelled before processing")
+                logger.warning(f"[Celery] Job {job_id} cancellation requested before processing")
+                # Mark as cancelled immediately
+                async with AsyncSessionLocal() as mark_db:
+                    service = IngestionService()
+                    await service._mark_job_cancelled(mark_db, job_id, "Cancelled before task execution")
                 return {"status": "cancelled", "reason": "cancelled_before_start"}
 
             # Ensure job is at discovery_complete stage
@@ -109,16 +128,22 @@ async def run_ingestion_job(self, job_id: str) -> dict:
         }
 
     except SoftTimeLimitExceeded:
-        error_msg = f"Job {job_id} exceeded time limit"
+        error_msg = f"Job {job_id} exceeded time limit (25 minutes soft limit)"
         logger.error(f"[Celery] {error_msg}")
 
-        # Mark job as failed
+        # Mark job as failed in separate async context
+        async def _mark_failed():
+            try:
+                async with AsyncSessionLocal() as db:
+                    service = IngestionService()
+                    await service._mark_job_failed(db, job_id, "Task exceeded time limit (25 minutes)")
+            except Exception as mark_error:
+                logger.error(f"[Celery] Failed to mark job as failed: {str(mark_error)}")
+
         try:
-            async with AsyncSessionLocal() as db:
-                service = IngestionService()
-                await service._mark_job_failed(db, job_id, "Task exceeded time limit (25 minutes)")
-        except Exception as mark_error:
-            logger.error(f"[Celery] Failed to mark job as failed: {str(mark_error)}")
+            asyncio.run(_mark_failed())
+        except Exception as outer_error:
+            logger.error(f"[Celery] Failed to run mark_failed: {str(outer_error)}")
 
         return {
             "status": "failed",
