@@ -56,6 +56,9 @@ class Assistant(Base):
     allowed_intents = Column(JSONB, default=list)   # List of allowed content intents
     widget_config = Column(JSONB, default=dict)      # Public widget settings
     system_prompt = Column(Text)                    # Generated system prompt
+
+    # Factual Overrides - curator-supplied canonical answers
+    factual_overrides = Column(JSONB, default=list)  # List of factual override entries
     
     # Content Statistics
     total_pages_crawled = Column(String, default="0")
