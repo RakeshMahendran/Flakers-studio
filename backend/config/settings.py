@@ -51,8 +51,18 @@ class Settings(BaseSettings):
     AZURE_SUBSCRIPTION_ID: str = ""
     AZURE_LOCATION: str = ""
     
-    # Redis (Optional - for caching and background jobs)
-    # REDIS_URL: str = "redis://localhost:6379"
+    # Redis (for caching and background jobs)
+    REDIS_URL: str = ""
+
+    # Cache Configuration
+    CACHE_ENABLED: bool = True
+    CACHE_TTL_EMBEDDING: int = 86400  # 24 hours
+    CACHE_TTL_FILTER: int = 3600  # 1 hour
+    CACHE_TTL_ANSWER: int = 900  # 15 minutes
+
+    # Cache versioning for invalidation
+    FILTER_SCHEMA_VERSION: str = "v1"
+    CONTENT_VERSION: str = "v1"  # Bump when assistant content is re-ingested
     
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"

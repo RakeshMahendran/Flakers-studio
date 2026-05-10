@@ -8,6 +8,7 @@ import logging
 
 from backend.config.settings import settings
 from backend.observability.usage_logging import log_token_usage
+from backend.cache.decorators import cached_embedding, cached_answer
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +182,10 @@ class AzureAIService:
             logger.warning("Filter extraction call failed (degrading to semantic-only): %s", e)
             return {"content": "", "usage": {}, "finish_reason": "error", "error": str(e)}
 
-    async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
+    @cached_embedding()
+    async def generate_embeddings(
+        self, texts: list[str], tenant_id: str | None = None
+    ) -> list[list[float]]:
         """Generate embeddings for text chunks using text-embedding-3-large"""
         try:
             batch_size = 100
@@ -224,3 +228,51 @@ class AzureAIService:
         except Exception as e:
             logger.error(f"Embedding generation error: {str(e)}")
             raise Exception(f"Embedding service error: {str(e)}")
+
+    @cached_answer()
+    async def generate_response_cached(
+        self,
+        system_prompt: str,
+        user_message: str,
+        max_tokens: int = 1000,
+        temperature: float = 0.1,
+        tenant_id: str | None = None,
+        assistant_id: str | None = None,
+        retrieved_chunks: list | None = None,
+        used_fallback: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Generate AI response with caching support.
+
+        This is a wrapper around generate_response that adds caching support
+        for the RAG pipeline. The cache is keyed by (tenant_id, assistant_id,
+        user_message, chunk_hashes, content_version).
+
+        Args:
+            system_prompt: Governance-generated prompt with approved context
+            user_message: User's question
+            max_tokens: Maximum response length
+            temperature: Response creativity (low for consistency)
+            tenant_id: Tenant ID for cache isolation
+            assistant_id: Assistant ID for cache key
+            retrieved_chunks: List of chunks used for context (for cache key)
+            used_fallback: If True, response will NOT be cached
+
+        Returns:
+            Dict with content and usage information
+
+        Note:
+            The @cached_answer decorator intercepts this method and:
+            - Skips caching if used_fallback=True
+            - Uses retrieved_chunks to create a stable cache key
+            - Ensures tenant isolation via tenant_id in cache key
+        """
+        # Call the non-cached generate_response method
+        return await self.generate_response(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            tenant_id=tenant_id,
+            assistant_id=assistant_id,
+        )
