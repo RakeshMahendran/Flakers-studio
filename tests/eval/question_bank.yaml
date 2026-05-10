@@ -1,0 +1,502 @@
+# RAG Evaluation Question Bank
+#
+# This file is the authoritative seed bank of prompts used by the RAG
+# evaluation harness. Each question is independent and routed through the
+# real ``RAGPipeline`` with mocked Azure + Qdrant backends so that the
+# scores are reproducible across machines and CI runs.
+#
+# Schema (per entry):
+#   id:               stable identifier (str). Never reuse across questions.
+#   query:            user prompt sent to the assistant.
+#   category:         one of greeting | small_talk | in_scope_factual |
+#                     in_scope_temporal | out_of_scope | policy_quote |
+#                     pricing_contact | ambiguous
+#   expected_decision ANSWER or REFUSE (matches backend.models.chat.ChatDecision)
+#   must_contain:     list of substrings that MUST appear in the answer
+#                     (case-insensitive). Empty list = no positive checks.
+#   must_not_contain: list of substrings that MUST NOT appear in the answer
+#                     (case-insensitive). Empty list = no negative checks.
+#   min_confidence:   optional float in [0, 1]. Currently advisory (the
+#                     current pipeline does not surface a confidence score
+#                     to callers, so the harness only enforces it when the
+#                     pipeline emits one).
+#   notes:            free-text rationale for reviewers / future authors.
+#
+# To add a question: append to the appropriate category section. To
+# refresh the baseline after intentional behavior changes, run:
+#     python -m tests.eval.runner --update-baseline
+#
+# Counts must match the spec: greeting 5, small_talk 3, in_scope_factual 15,
+# in_scope_temporal 8, out_of_scope 5, policy_quote 4, pricing_contact 5,
+# ambiguous 5 (total = 50).
+
+questions:
+  # -------------------------------------------------------------------
+  # greeting (5)
+  # -------------------------------------------------------------------
+  - id: greet-01
+    query: "hi"
+    category: greeting
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain:
+      - "I don't have information"
+      - "out of scope"
+    notes: "Bare greeting should hit the small-talk fast path."
+
+  - id: greet-02
+    query: "Hello there!"
+    category: greeting
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain:
+      - "knowledge base"
+    notes: "Capitalised greeting variant."
+
+  - id: greet-03
+    query: "Good morning"
+    category: greeting
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain:
+      - "out of scope"
+    notes: "Time-of-day greeting."
+
+  - id: greet-04
+    query: "hey"
+    category: greeting
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Casual greeting."
+
+  - id: greet-05
+    query: "yo"
+    category: greeting
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Slang greeting matched by small-talk regex."
+
+  # -------------------------------------------------------------------
+  # small_talk (3)
+  # -------------------------------------------------------------------
+  - id: smalltalk-01
+    query: "how are you?"
+    category: small_talk
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain:
+      - "knowledge base"
+    notes: "Generic check-in question."
+
+  - id: smalltalk-02
+    query: "thanks!"
+    category: small_talk
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Gratitude / closing."
+
+  - id: smalltalk-03
+    query: "bye"
+    category: small_talk
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Farewell."
+
+  # -------------------------------------------------------------------
+  # in_scope_factual (15) — answerable from the seeded KB
+  # -------------------------------------------------------------------
+  - id: factual-01
+    query: "What is Acme Cloud?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "Acme Cloud"
+    must_not_contain:
+      - "I don't have information"
+    notes: "Product overview question."
+
+  - id: factual-02
+    query: "Where is Acme headquartered?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "San Francisco"
+    must_not_contain: []
+    notes: "Location lookup."
+
+  - id: factual-03
+    query: "Who founded Acme?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "Jane Doe"
+    must_not_contain: []
+    notes: "Founder lookup."
+
+  - id: factual-04
+    query: "What programming languages does the SDK support?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "Python"
+    must_not_contain: []
+    notes: "SDK feature."
+
+  - id: factual-05
+    query: "How do I install the Acme CLI?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "pip install"
+    must_not_contain: []
+    notes: "Install instructions."
+
+  - id: factual-06
+    query: "What databases does Acme integrate with?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "Postgres"
+    must_not_contain: []
+    notes: "Integration list."
+
+  - id: factual-07
+    query: "Does Acme offer a free tier?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "free"
+    must_not_contain: []
+    notes: "Tier confirmation."
+
+  - id: factual-08
+    query: "How does authentication work in the API?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "API key"
+    must_not_contain: []
+    notes: "Auth model."
+
+  - id: factual-09
+    query: "What regions is Acme available in?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "US"
+    must_not_contain: []
+    notes: "Region availability."
+
+  - id: factual-10
+    query: "How big is the Acme engineering team?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "engineers"
+    must_not_contain: []
+    notes: "Team size."
+
+  - id: factual-11
+    query: "What is Acme's uptime SLA?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "99.9"
+    must_not_contain: []
+    notes: "SLA lookup."
+
+  - id: factual-12
+    query: "Does Acme support webhooks?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "webhook"
+    must_not_contain: []
+    notes: "Feature confirmation."
+
+  - id: factual-13
+    query: "What is the maximum file upload size?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "100"
+    must_not_contain: []
+    notes: "Limit lookup."
+
+  - id: factual-14
+    query: "Is Acme SOC 2 compliant?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "SOC 2"
+    must_not_contain: []
+    notes: "Compliance lookup."
+
+  - id: factual-15
+    query: "What languages is the documentation available in?"
+    category: in_scope_factual
+    expected_decision: ANSWER
+    must_contain:
+      - "English"
+    must_not_contain: []
+    notes: "Docs language list."
+
+  # -------------------------------------------------------------------
+  # in_scope_temporal (8) — time-sensitive answers
+  # -------------------------------------------------------------------
+  - id: temporal-01
+    query: "When was Acme founded?"
+    category: in_scope_temporal
+    expected_decision: ANSWER
+    must_contain:
+      - "2018"
+    must_not_contain: []
+    notes: "Founding year."
+
+  - id: temporal-02
+    query: "When did Acme launch the v2 API?"
+    category: in_scope_temporal
+    expected_decision: ANSWER
+    must_contain:
+      - "2024"
+    must_not_contain: []
+    notes: "Product launch year."
+
+  - id: temporal-03
+    query: "What is the current stable version?"
+    category: in_scope_temporal
+    expected_decision: ANSWER
+    must_contain:
+      - "v3"
+    must_not_contain: []
+    notes: "Current release."
+
+  - id: temporal-04
+    query: "When is the next maintenance window?"
+    category: in_scope_temporal
+    expected_decision: ANSWER
+    must_contain:
+      - "Sunday"
+    must_not_contain: []
+    notes: "Scheduled maintenance."
+
+  - id: temporal-05
+    query: "How long is the data retention period?"
+    category: in_scope_temporal
+    expected_decision: ANSWER
+    must_contain:
+      - "90 days"
+    must_not_contain: []
+    notes: "Retention window."
+
+  - id: temporal-06
+    query: "When does the trial expire?"
+    category: in_scope_temporal
+    expected_decision: ANSWER
+    must_contain:
+      - "14 days"
+    must_not_contain: []
+    notes: "Trial duration."
+
+  - id: temporal-07
+    query: "What was deprecated in the latest release?"
+    category: in_scope_temporal
+    expected_decision: ANSWER
+    must_contain:
+      - "v1"
+    must_not_contain: []
+    notes: "Deprecation note."
+
+  - id: temporal-08
+    query: "When are support hours?"
+    category: in_scope_temporal
+    expected_decision: ANSWER
+    must_contain:
+      - "9am"
+    must_not_contain: []
+    notes: "Support availability."
+
+  # -------------------------------------------------------------------
+  # out_of_scope (5) — content NOT in the KB
+  # -------------------------------------------------------------------
+  - id: oos-01
+    query: "What is the weather in Paris today?"
+    category: out_of_scope
+    expected_decision: ANSWER  # current pipeline degrades gracefully rather than hard-refusing
+    must_contain: []
+    must_not_contain:
+      - "Acme Cloud is "
+    notes: |
+      The current pipeline does not surface REFUSE; it falls back to a
+      generic "I don't have that info" reply. We assert the ANSWER path
+      and confirm it does not hallucinate Acme facts.
+
+  - id: oos-02
+    query: "Who won the 2022 World Cup?"
+    category: out_of_scope
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain:
+      - "Acme"
+    notes: "Generic trivia outside the KB."
+
+  - id: oos-03
+    query: "Tell me a joke about pirates."
+    category: out_of_scope
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain:
+      - "Acme"
+    notes: "Entertainment request."
+
+  - id: oos-04
+    query: "What is the capital of Mongolia?"
+    category: out_of_scope
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain:
+      - "San Francisco"
+    notes: "Geography trivia."
+
+  - id: oos-05
+    query: "Recommend a good Italian restaurant nearby."
+    category: out_of_scope
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain:
+      - "Acme Cloud"
+    notes: "Local recommendation outside scope."
+
+  # -------------------------------------------------------------------
+  # policy_quote (4) — must include exact policy language
+  # -------------------------------------------------------------------
+  - id: policy-01
+    query: "What is the refund policy?"
+    category: policy_quote
+    expected_decision: ANSWER
+    must_contain:
+      - "30 days"
+    must_not_contain: []
+    notes: "Refund window must appear verbatim."
+
+  - id: policy-02
+    query: "What is your privacy policy on data sharing?"
+    category: policy_quote
+    expected_decision: ANSWER
+    must_contain:
+      - "third parties"
+    must_not_contain: []
+    notes: "Privacy quote."
+
+  - id: policy-03
+    query: "What does the terms of service say about liability?"
+    category: policy_quote
+    expected_decision: ANSWER
+    must_contain:
+      - "liability"
+    must_not_contain: []
+    notes: "ToS quote."
+
+  - id: policy-04
+    query: "What is the acceptable use policy?"
+    category: policy_quote
+    expected_decision: ANSWER
+    must_contain:
+      - "acceptable use"
+    must_not_contain: []
+    notes: "AUP quote."
+
+  # -------------------------------------------------------------------
+  # pricing_contact (5)
+  # -------------------------------------------------------------------
+  - id: pricing-01
+    query: "How much does the Pro plan cost?"
+    category: pricing_contact
+    expected_decision: ANSWER
+    must_contain:
+      - "$49"
+    must_not_contain: []
+    notes: "Pro tier price."
+
+  - id: pricing-02
+    query: "What does the Enterprise plan include?"
+    category: pricing_contact
+    expected_decision: ANSWER
+    must_contain:
+      - "Enterprise"
+    must_not_contain: []
+    notes: "Enterprise plan summary."
+
+  - id: pricing-03
+    query: "How do I contact sales?"
+    category: pricing_contact
+    expected_decision: ANSWER
+    must_contain:
+      - "sales@"
+    must_not_contain: []
+    notes: "Sales contact email."
+
+  - id: pricing-04
+    query: "What is the support email?"
+    category: pricing_contact
+    expected_decision: ANSWER
+    must_contain:
+      - "support@"
+    must_not_contain: []
+    notes: "Support contact."
+
+  - id: pricing-05
+    query: "Is there a discount for annual billing?"
+    category: pricing_contact
+    expected_decision: ANSWER
+    must_contain:
+      - "20%"
+    must_not_contain: []
+    notes: "Annual discount."
+
+  # -------------------------------------------------------------------
+  # ambiguous (5) — vague, may or may not retrieve good context
+  # -------------------------------------------------------------------
+  - id: ambig-01
+    query: "Tell me more"
+    category: ambiguous
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Vague continuation prompt."
+
+  - id: ambig-02
+    query: "What about the other one?"
+    category: ambiguous
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Anaphoric reference with no antecedent."
+
+  - id: ambig-03
+    query: "Explain it again"
+    category: ambiguous
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Re-explanation request."
+
+  - id: ambig-04
+    query: "Can you help?"
+    category: ambiguous
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Vague request for help."
+
+  - id: ambig-05
+    query: "How does it work?"
+    category: ambiguous
+    expected_decision: ANSWER
+    must_contain: []
+    must_not_contain: []
+    notes: "Subject-less how-question; may retrieve generic Acme overview."
