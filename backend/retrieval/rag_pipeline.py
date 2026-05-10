@@ -99,6 +99,11 @@ class RAGPipeline:
 
             if isinstance(embed_result, Exception):
                 # Embedding is required — propagate.
+                logger.error(
+                    "Embedding generation failed: %s",
+                    embed_result,
+                    exc_info=embed_result
+                )
                 raise embed_result
             query_embedding = embed_result
 
@@ -106,10 +111,17 @@ class RAGPipeline:
                 logger.warning(
                     "Filter extraction raised; falling back to semantic-only: %s",
                     filter_outcome,
+                    exc_info=filter_outcome
+                )
+                filter_result = FilterResult()
+            elif filter_outcome is None:
+                # Defensive: extract() should always return FilterResult, but guard against bugs
+                logger.warning(
+                    "Filter extraction returned None (this should not happen), falling back to semantic-only"
                 )
                 filter_result = FilterResult()
             else:
-                filter_result = filter_outcome or FilterResult()
+                filter_result = filter_outcome
 
             project_name = assistant.name
             try:
@@ -152,6 +164,19 @@ class RAGPipeline:
                     user_name=user_name,
                     payload_filters={},
                 )
+
+                if not retrieved_chunks:
+                    # Fallback also returned nothing — likely no content in DB
+                    logger.warning(
+                        "Fallback semantic search also returned 0 results (assistant_id=%s). "
+                        "This suggests no content indexed or score_threshold too high.",
+                        assistant.id
+                    )
+                else:
+                    logger.info(
+                        "Fallback succeeded: retrieved %d chunks without filters",
+                        len(retrieved_chunks)
+                    )
 
             observe_vector_search(len(retrieved_chunks))
             logger.info(

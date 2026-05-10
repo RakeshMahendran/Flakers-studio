@@ -178,8 +178,24 @@ class AzureAIService:
             return result
 
         except Exception as e:  # noqa: BLE001 — degrade gracefully
-            logger.warning("Filter extraction call failed (degrading to semantic-only): %s", e)
-            return {"content": "", "usage": {}, "finish_reason": "error", "error": str(e)}
+            logger.warning(
+                "Filter extraction call failed (degrading to semantic-only): %s",
+                e,
+                exc_info=True,  # Include stack trace for debugging
+                extra={
+                    "tenant_id": tenant_id,
+                    "assistant_id": assistant_id,
+                    "model": self.filter_extraction_model,
+                }
+            )
+            # Return empty content to trigger fallback; include error for debugging
+            return {
+                "content": "",
+                "usage": {},
+                "finish_reason": "error",
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for text chunks using text-embedding-3-large"""
