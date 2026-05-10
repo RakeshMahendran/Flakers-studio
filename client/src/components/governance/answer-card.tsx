@@ -16,7 +16,6 @@ import { Streamdown } from "streamdown";
 
 import { Card, Chip } from "@/components/ui/primitives";
 import { cn } from "@/lib/design-system";
-import { getSafeHostname, sanitizeUrl, isSafeFaviconUrl } from "@/lib/url-utils";
 import { ConfidenceRing } from "./confidence-ring";
 import {
   GOVERNANCE_RULE_LABELS,
@@ -210,21 +209,14 @@ export function AnswerCard({
                 "[scrollbar-width:thin]",
               )}
             >
-              {sources.map((s, i) => {
-                // Validate source has required fields
-                if (!s.url || !s.title) {
-                  console.warn('Invalid source at index', i, s);
-                  return null;
-                }
-                return (
-                  <SourceChip
-                    key={s.id ?? `source-${i}`}
-                    source={s}
-                    index={i}
-                    onOpen={onOpenSource}
-                  />
-                );
-              })}
+              {sources.map((s, i) => (
+                <SourceChip
+                  key={s.id ?? i}
+                  source={s}
+                  index={i}
+                  onOpen={onOpenSource}
+                />
+              ))}
             </div>
           </div>
         ) : null}
@@ -301,23 +293,38 @@ export function AnswerCard({
 /* ------------------------------------------------------------------ */
 /* Source chip                                                         */
 /* ------------------------------------------------------------------ */
-interface SourceChipProps {
-  source: GovernanceSource;
-  index: number;
-  onOpen?: (s: GovernanceSource) => void;
-}
-
 function SourceChip({
   source,
   index,
   onOpen,
-}: SourceChipProps) {
-  const host = React.useMemo(() => getSafeHostname(source.url), [source.url]);
-  const safeUrl = React.useMemo(() => sanitizeUrl(source.url), [source.url]);
-  const safeFaviconUrl = React.useMemo(
-    () => (isSafeFaviconUrl(source.faviconUrl) ? source.faviconUrl : null),
-    [source.faviconUrl]
-  );
+}: {
+  source: GovernanceSource;
+  index: number;
+  onOpen?: (s: GovernanceSource) => void;
+}) {
+  const host = React.useMemo(() => {
+    try {
+      const url = new URL(source.url);
+      // SECURITY: Only allow http/https protocols
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        return 'Invalid URL';
+      }
+      return url.host.replace(/^www\./, "");
+    } catch {
+      return 'Invalid URL';
+    }
+  }, [source.url]);
+
+  // SECURITY: Validate favicon URL
+  const safeFaviconUrl = React.useMemo(() => {
+    if (!source.faviconUrl) return null;
+    try {
+      const url = new URL(source.faviconUrl);
+      return ['http:', 'https:', 'data:'].includes(url.protocol) ? source.faviconUrl : null;
+    } catch {
+      return null;
+    }
+  }, [source.faviconUrl]);
 
   const truncated =
     source.title.length > 36
@@ -327,11 +334,6 @@ function SourceChip({
   const Icon = source.faviconUrl ? null : source.url.startsWith("http")
     ? Globe
     : FileText;
-
-  // Don't render if URL is unsafe
-  if (!safeUrl) {
-    return null;
-  }
 
   return (
     <motion.button
@@ -359,12 +361,6 @@ function SourceChip({
           alt=""
           className="h-3.5 w-3.5 rounded-sm"
           aria-hidden
-          referrerPolicy="no-referrer"
-          loading="lazy"
-          onError={(e) => {
-            // Hide broken favicon images
-            e.currentTarget.style.display = 'none';
-          }}
         />
       ) : Icon ? (
         <Icon className="h-3.5 w-3.5" aria-hidden />
@@ -382,12 +378,7 @@ function SourceChip({
 /* ------------------------------------------------------------------ */
 /* Rule chip — uses CSS rule-cascade animation                         */
 /* ------------------------------------------------------------------ */
-interface RuleChipProps {
-  rule: RuleEvaluation;
-  index: number;
-}
-
-function RuleChip({ rule, index }: RuleChipProps) {
+function RuleChip({ rule, index }: { rule: RuleEvaluation; index: number }) {
   const stagger = cascadeStaggerClass(index);
   const label = GOVERNANCE_RULE_LABELS[rule.id] ?? rule.id;
 
@@ -427,19 +418,17 @@ function RuleChip({ rule, index }: RuleChipProps) {
 /* ------------------------------------------------------------------ */
 /* Footer icon button                                                  */
 /* ------------------------------------------------------------------ */
-interface FooterIconButtonProps {
-  label: string;
-  children: React.ReactNode;
-  active?: boolean;
-  onClick?: () => void;
-}
-
 function FooterIconButton({
   label,
   children,
   active,
   onClick,
-}: FooterIconButtonProps) {
+}: {
+  label: string;
+  children: React.ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"

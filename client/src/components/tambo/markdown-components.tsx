@@ -137,10 +137,15 @@ export const createMarkdownComponents = (): Record<
 
     const highlighted = React.useMemo(() => {
       if (!match || !looksLikeCode(deferredContent)) return null;
+
+      // SECURITY: Sanitize content BEFORE highlighting to prevent XSS
+      // If highlight.js throws, we fallback to sanitized content (not raw)
+      const sanitizedContent = DOMPurify.sanitize(deferredContent);
+
       try {
-        return hljs.highlight(deferredContent, { language: match[1] }).value;
+        return hljs.highlight(sanitizedContent, { language: match[1] }).value;
       } catch {
-        return deferredContent;
+        return sanitizedContent;
       }
     }, [deferredContent, match]);
 

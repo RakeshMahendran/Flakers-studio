@@ -1,11 +1,23 @@
 "use client";
 
+/**
+ * @deprecated
+ * This is the legacy chat surface. The canonical chat interface is
+ * `./chat-interface-tambo.tsx` (component `ChatInterfaceTambo`), which is
+ * what every route in this app now renders.
+ *
+ * This file is kept temporarily for reference until the migration to the
+ * Tambo-driven chat surface fully stabilises across branches. Importing
+ * this component will emit a runtime console warning.
+ *
+ * DO NOT add new features here.
+ */
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button, Badge } from "@/components/ui/enhanced-ui";
-import { 
-  ChevronLeft, ShieldCheck, Send, ArrowUp, Paperclip, AtSign, 
-  FileText, HelpCircle, X, Check, Loader2, ChevronDown, Brain, Plus 
+import {
+  ChevronLeft, ShieldCheck, Send, ArrowUp, Paperclip, AtSign,
+  FileText, HelpCircle, X, Check, Loader2, ChevronDown, Brain, Plus
 } from "lucide-react";
 import { User, Assistant } from "../app";
 import { generativeComponents } from "@/components/tambo/generative";
@@ -16,6 +28,16 @@ import {
   type GovernanceSource,
   type RuleEvaluation,
 } from "@/components/governance";
+
+if (typeof window !== "undefined") {
+  // Fires once per module evaluation — caller modules pay this only if
+  // they actually still import the legacy screen.
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[chat-interface] Legacy ChatInterface is deprecated. " +
+      "Use ChatInterfaceTambo from chat-interface-tambo.tsx instead.",
+  );
+}
 
 interface ChatMessage {
   id: string;
