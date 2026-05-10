@@ -3,6 +3,8 @@ Thin retrieval service around the configured vector store.
 """
 from __future__ import annotations
 
+from typing import Any, Dict, Optional
+
 from backend.vector_providers.base import VectorSearchQuery
 from backend.vector_providers.qdrant_provider import get_vector_store
 
@@ -20,6 +22,7 @@ class RetrievalService:
         score_threshold: float,
         assistant_name: str,
         user_name: str,
+        payload_filters: Optional[Dict[str, Any]] = None,
     ):
         return await self.vector_store.search(
             VectorSearchQuery(
@@ -29,5 +32,6 @@ class RetrievalService:
                 score_threshold=score_threshold,
                 assistant_name=assistant_name,
                 user_name=user_name,
+                payload_filters=payload_filters or {},
             )
         )

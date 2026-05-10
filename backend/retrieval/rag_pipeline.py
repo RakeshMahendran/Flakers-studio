@@ -3,6 +3,7 @@ RAG pipeline extracted from chat routing.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, List, Optional
 import logging
 import re
@@ -13,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config.logging import log_context
+from backend.config.settings import settings
 from backend.models.assistant import Assistant
 from backend.models.chat import ChatDecision, ChatMessage, ChatSession
 from backend.observability.metrics import observe_vector_search
@@ -21,6 +23,7 @@ from backend.services.azure_ai import AzureAIService
 from backend.services.embeddings import EmbeddingService
 from backend.retrieval.retrieval_service import RetrievalService
 from backend.retrieval.fast_intent import FastIntentResult, detect_fast_intent
+from backend.retrieval.filter_extractor import FilterExtractor, FilterResult
 from backend.retrieval.prompt_builder import (
     detect_response_mode,
     get_synthesis_system_prompt,
@@ -37,10 +40,17 @@ class RAGPipeline:
         embedding_service: Optional[EmbeddingService] = None,
         azure_service: Optional[AzureAIService] = None,
         retrieval_service: Optional[RetrievalService] = None,
+        filter_extractor: Optional[FilterExtractor] = None,
     ):
         self.embedding_service = embedding_service or EmbeddingService()
         self.azure_service = azure_service or AzureAIService()
         self.retrieval_service = retrieval_service or RetrievalService()
+        # Filter extractor is opt-out via ``settings.ENABLE_FILTER_EXTRACTION``
+        # (the extractor itself short-circuits on the flag, but we still
+        # build it lazily so unit tests can swap in a stub).
+        self.filter_extractor = filter_extractor or FilterExtractor(
+            azure_service=self.azure_service
+        )
 
     async def handle_query(
         self,
@@ -73,7 +83,45 @@ class RAGPipeline:
                     start_time=start_time,
                 )
 
-            query_embedding = await self.embedding_service.embed_text(user_message)
+            # Run embedding + LLM-based filter extraction in PARALLEL.
+            # Total added latency is max(embed_time, filter_time), not their
+            # sum. ``return_exceptions=True`` keeps a filter-extraction
+            # failure from killing the whole request — we degrade to
+            # semantic-only retrieval instead.
+            embed_coro = self.embedding_service.embed_text(user_message)
+            filter_coro = self._run_filter_extraction(
+                user_message=user_message,
+                assistant=assistant,
+            )
+            embed_result, filter_outcome = await asyncio.gather(
+                embed_coro, filter_coro, return_exceptions=True
+            )
+
+            if isinstance(embed_result, Exception):
+                # Embedding is required — propagate.
+                logger.error(
+                    "Embedding generation failed: %s",
+                    embed_result,
+                    exc_info=embed_result
+                )
+                raise embed_result
+            query_embedding = embed_result
+
+            if isinstance(filter_outcome, Exception):
+                logger.warning(
+                    "Filter extraction raised; falling back to semantic-only: %s",
+                    filter_outcome,
+                    exc_info=filter_outcome
+                )
+                filter_result = FilterResult()
+            elif filter_outcome is None:
+                # Defensive: extract() should always return FilterResult, but guard against bugs
+                logger.warning(
+                    "Filter extraction returned None (this should not happen), falling back to semantic-only"
+                )
+                filter_result = FilterResult()
+            else:
+                filter_result = filter_outcome
 
             project_name = assistant.name
             try:
@@ -85,6 +133,10 @@ class RAGPipeline:
                 project_name = assistant.name
 
             user_name = str(assistant.tenant_id)[:8]
+
+            payload_filters = dict(filter_result.filters) if filter_result.filters else {}
+            used_fallback = False
+
             retrieved_chunks = await self.retrieval_service.search_assistant_content(
                 assistant_id=str(assistant.id),
                 query_embedding=query_embedding,
@@ -92,10 +144,48 @@ class RAGPipeline:
                 score_threshold=0.55,
                 assistant_name=project_name,
                 user_name=user_name,
+                payload_filters=payload_filters,
             )
 
+            # Fallback: if a filtered search returned nothing, retry once
+            # with no payload filter (semantic-only) and tag the response.
+            if payload_filters and not retrieved_chunks:
+                logger.info(
+                    "Filtered search empty (filters=%s); retrying semantic-only",
+                    sorted(payload_filters.keys()),
+                )
+                used_fallback = True
+                retrieved_chunks = await self.retrieval_service.search_assistant_content(
+                    assistant_id=str(assistant.id),
+                    query_embedding=query_embedding,
+                    limit=10,
+                    score_threshold=0.55,
+                    assistant_name=project_name,
+                    user_name=user_name,
+                    payload_filters={},
+                )
+
+                if not retrieved_chunks:
+                    # Fallback also returned nothing — likely no content in DB
+                    logger.warning(
+                        "Fallback semantic search also returned 0 results (assistant_id=%s). "
+                        "This suggests no content indexed or score_threshold too high.",
+                        assistant.id
+                    )
+                else:
+                    logger.info(
+                        "Fallback succeeded: retrieved %d chunks without filters",
+                        len(retrieved_chunks)
+                    )
+
             observe_vector_search(len(retrieved_chunks))
-            logger.info("Retrieved %s chunks for assistant %s", len(retrieved_chunks), assistant.id)
+            logger.info(
+                "Retrieved %s chunks for assistant %s (filters=%s used_fallback=%s)",
+                len(retrieved_chunks),
+                assistant.id,
+                sorted(payload_filters.keys()) if payload_filters else [],
+                used_fallback,
+            )
 
             if not retrieved_chunks:
                 if self.is_small_talk(user_message):
@@ -145,6 +235,8 @@ Guidelines:
                     "rules_applied": ["No context found - general response"],
                     "session_id": str(session.id),
                     "processing_time_ms": processing_time_ms,
+                    "used_fallback": used_fallback,
+                    "applied_filters": sorted(payload_filters.keys()) if payload_filters else [],
                 }
 
             context_text = "\n\n".join(
@@ -217,7 +309,45 @@ Guidelines:
                 "rules_applied": [],
                 "session_id": str(session.id),
                 "processing_time_ms": processing_time_ms,
+                "used_fallback": used_fallback,
+                "applied_filters": sorted(payload_filters.keys()) if payload_filters else [],
             }
+
+    async def _run_filter_extraction(
+        self,
+        *,
+        user_message: str,
+        assistant: Assistant,
+    ) -> FilterResult:
+        """Wrap ``FilterExtractor.extract`` so it's safe inside ``asyncio.gather``.
+
+        The extractor itself short-circuits on the off-switch and on
+        invalid JSON, returning an empty ``FilterResult`` rather than
+        raising. This wrapper exists so the gather call has a single
+        coroutine type to await, and so we can apply a per-call timeout
+        without leaking it into the public extractor API.
+        """
+        if not getattr(settings, "ENABLE_FILTER_EXTRACTION", True):
+            return FilterResult()
+        timeout = float(getattr(settings, "FILTER_EXTRACTION_TIMEOUT_SECONDS", 4.0))
+        try:
+            return await asyncio.wait_for(
+                self.filter_extractor.extract(
+                    query=user_message,
+                    tenant_id=str(getattr(assistant, "tenant_id", "")) or None,
+                    assistant_id=str(getattr(assistant, "id", "")) or None,
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Filter extraction timed out after %.2fs; falling back to semantic-only",
+                timeout,
+            )
+            return FilterResult()
+        except Exception as e:  # noqa: BLE001 — extractor must never break the request
+            logger.warning("Filter extraction errored: %s", e)
+            return FilterResult()
 
     @staticmethod
     async def _fetch_last_bot_message(db: AsyncSession, session_id: Any) -> Optional[str]:
