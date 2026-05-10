@@ -132,15 +132,17 @@ export function DecisionRenderer({
 /* ------------------------------------------------------------------ */
 /* Source Explorer overlay                                             */
 /* ------------------------------------------------------------------ */
+interface SourceExplorerOverlayProps {
+  sources: GovernanceSource[];
+  initialExpandedId?: string;
+  onClose: () => void;
+}
+
 function SourceExplorerOverlay({
   sources,
   initialExpandedId,
   onClose,
-}: {
-  sources: GovernanceSource[];
-  initialExpandedId?: string;
-  onClose: () => void;
-}) {
+}: SourceExplorerOverlayProps) {
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();

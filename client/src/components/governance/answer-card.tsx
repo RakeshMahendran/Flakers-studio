@@ -16,6 +16,7 @@ import { Streamdown } from "streamdown";
 
 import { Card, Chip } from "@/components/ui/primitives";
 import { cn } from "@/lib/design-system";
+import { getSafeHostname, sanitizeUrl, isSafeFaviconUrl } from "@/lib/url-utils";
 import { ConfidenceRing } from "./confidence-ring";
 import {
   GOVERNANCE_RULE_LABELS,
@@ -209,14 +210,21 @@ export function AnswerCard({
                 "[scrollbar-width:thin]",
               )}
             >
-              {sources.map((s, i) => (
-                <SourceChip
-                  key={s.id ?? i}
-                  source={s}
-                  index={i}
-                  onOpen={onOpenSource}
-                />
-              ))}
+              {sources.map((s, i) => {
+                // Validate source has required fields
+                if (!s.url || !s.title) {
+                  console.warn('Invalid source at index', i, s);
+                  return null;
+                }
+                return (
+                  <SourceChip
+                    key={s.id ?? `source-${i}`}
+                    source={s}
+                    index={i}
+                    onOpen={onOpenSource}
+                  />
+                );
+              })}
             </div>
           </div>
         ) : null}
@@ -293,22 +301,23 @@ export function AnswerCard({
 /* ------------------------------------------------------------------ */
 /* Source chip                                                         */
 /* ------------------------------------------------------------------ */
+interface SourceChipProps {
+  source: GovernanceSource;
+  index: number;
+  onOpen?: (s: GovernanceSource) => void;
+}
+
 function SourceChip({
   source,
   index,
   onOpen,
-}: {
-  source: GovernanceSource;
-  index: number;
-  onOpen?: (s: GovernanceSource) => void;
-}) {
-  const host = React.useMemo(() => {
-    try {
-      return new URL(source.url).host.replace(/^www\./, "");
-    } catch {
-      return source.url;
-    }
-  }, [source.url]);
+}: SourceChipProps) {
+  const host = React.useMemo(() => getSafeHostname(source.url), [source.url]);
+  const safeUrl = React.useMemo(() => sanitizeUrl(source.url), [source.url]);
+  const safeFaviconUrl = React.useMemo(
+    () => (isSafeFaviconUrl(source.faviconUrl) ? source.faviconUrl : null),
+    [source.faviconUrl]
+  );
 
   const truncated =
     source.title.length > 36
@@ -318,6 +327,11 @@ function SourceChip({
   const Icon = source.faviconUrl ? null : source.url.startsWith("http")
     ? Globe
     : FileText;
+
+  // Don't render if URL is unsafe
+  if (!safeUrl) {
+    return null;
+  }
 
   return (
     <motion.button
@@ -338,13 +352,19 @@ function SourceChip({
       title={`${source.title} · ${host}`}
       aria-label={`Open source: ${source.title}`}
     >
-      {source.faviconUrl ? (
+      {safeFaviconUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={source.faviconUrl}
+          src={safeFaviconUrl}
           alt=""
           className="h-3.5 w-3.5 rounded-sm"
           aria-hidden
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onError={(e) => {
+            // Hide broken favicon images
+            e.currentTarget.style.display = 'none';
+          }}
         />
       ) : Icon ? (
         <Icon className="h-3.5 w-3.5" aria-hidden />
@@ -362,7 +382,12 @@ function SourceChip({
 /* ------------------------------------------------------------------ */
 /* Rule chip — uses CSS rule-cascade animation                         */
 /* ------------------------------------------------------------------ */
-function RuleChip({ rule, index }: { rule: RuleEvaluation; index: number }) {
+interface RuleChipProps {
+  rule: RuleEvaluation;
+  index: number;
+}
+
+function RuleChip({ rule, index }: RuleChipProps) {
   const stagger = cascadeStaggerClass(index);
   const label = GOVERNANCE_RULE_LABELS[rule.id] ?? rule.id;
 
@@ -402,17 +427,19 @@ function RuleChip({ rule, index }: { rule: RuleEvaluation; index: number }) {
 /* ------------------------------------------------------------------ */
 /* Footer icon button                                                  */
 /* ------------------------------------------------------------------ */
+interface FooterIconButtonProps {
+  label: string;
+  children: React.ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+}
+
 function FooterIconButton({
   label,
   children,
   active,
   onClick,
-}: {
-  label: string;
-  children: React.ReactNode;
-  active?: boolean;
-  onClick?: () => void;
-}) {
+}: FooterIconButtonProps) {
   return (
     <button
       type="button"

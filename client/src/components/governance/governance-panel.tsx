@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Dialog } from "radix-ui";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   AlertTriangle,
   Check,
@@ -117,12 +117,15 @@ export function GovernancePanel({
             </div>
             <a
               href={docsHref}
+              target="_blank"
+              rel="noopener noreferrer"
               className={cn(
                 "inline-flex items-center gap-1 text-xs font-medium",
                 "text-[var(--color-brand)] hover:text-[var(--color-brand-hover)]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
                 "rounded-md px-1.5 py-0.5",
               )}
+              aria-label="Open governance documentation in new tab"
             >
               Governance docs
               <ExternalLink className="h-3 w-3" aria-hidden />
@@ -137,19 +140,21 @@ export function GovernancePanel({
 /* ------------------------------------------------------------------ */
 /* Header                                                              */
 /* ------------------------------------------------------------------ */
+interface HeaderProps {
+  assistantName?: string;
+  decision: GovernanceDecision;
+  passedCount: number;
+  totalEvaluated: number;
+  onClose: () => void;
+}
+
 function Header({
   assistantName,
   decision,
   passedCount,
   totalEvaluated,
   onClose,
-}: {
-  assistantName?: string;
-  decision: GovernanceDecision;
-  passedCount: number;
-  totalEvaluated: number;
-  onClose: () => void;
-}) {
+}: HeaderProps) {
   const isAnswer = decision.decision === "ANSWER";
   return (
     <div
@@ -226,13 +231,15 @@ function Header({
 /* ------------------------------------------------------------------ */
 /* Timeline item                                                       */
 /* ------------------------------------------------------------------ */
+interface RuleTimelineItemProps {
+  rule: RuleEvaluation & { label: string; description: string };
+  isLast: boolean;
+}
+
 function RuleTimelineItem({
   rule,
   isLast,
-}: {
-  rule: RuleEvaluation & { label: string; description: string };
-  isLast: boolean;
-}) {
+}: RuleTimelineItemProps) {
   const [open, setOpen] = React.useState(false);
   const tone = statusTone(rule.status);
 
@@ -316,7 +323,11 @@ function RuleTimelineItem({
   );
 }
 
-function StatusIcon({ status }: { status: RuleStatus }) {
+interface StatusIconProps {
+  status: RuleStatus;
+}
+
+function StatusIcon({ status }: StatusIconProps) {
   if (status === "passed") return <Check className="h-3.5 w-3.5" />;
   if (status === "borderline") return <AlertTriangle className="h-3 w-3" />;
   if (status === "failed") return <X className="h-3.5 w-3.5" />;

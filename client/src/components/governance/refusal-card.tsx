@@ -176,7 +176,7 @@ export function RefusalCard({
               {tries.map((suggestion, i) => (
                 <button
                   type="button"
-                  key={i}
+                  key={`suggestion-${i}-${suggestion.slice(0, 20)}`}
                   onClick={() => onSuggestionClick?.(suggestion)}
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-full border",
@@ -188,6 +188,7 @@ export function RefusalCard({
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
                     "transition-all duration-[var(--duration-fast)]",
                   )}
+                  aria-label={`Try suggestion: ${suggestion}`}
                 >
                   <Sparkles className="h-3 w-3" aria-hidden />
                   {suggestion}
@@ -234,13 +235,15 @@ export function RefusalCard({
   );
 }
 
+interface BlockingRuleRowProps {
+  rule: RuleEvaluation;
+  index: number;
+}
+
 function BlockingRuleRow({
   rule,
   index,
-}: {
-  rule: RuleEvaluation;
-  index: number;
-}) {
+}: BlockingRuleRowProps) {
   const label = GOVERNANCE_RULE_LABELS[rule.id] ?? rule.id;
   const isBorderline = rule.status === "borderline";
   return (

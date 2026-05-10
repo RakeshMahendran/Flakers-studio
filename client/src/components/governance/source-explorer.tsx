@@ -13,6 +13,7 @@ import {
 
 import { Card, Chip } from "@/components/ui/primitives";
 import { cn, confidenceColor } from "@/lib/design-system";
+import { getSafeHostname, sanitizeUrl, isSafeFaviconUrl } from "@/lib/url-utils";
 import type { GovernanceSource } from "./types";
 
 interface SourceExplorerProps {
@@ -185,17 +186,26 @@ export function SourceExplorer({
           // Card grid on wider widths
           "md:grid-cols-2",
         )}
+        role="list"
+        aria-label="Source cards"
       >
-        {filtered.map((source) => (
-          <SourceCard
-            key={source.id}
-            source={source}
-            expanded={expandedId === source.id}
-            onToggle={() =>
-              setExpandedId(expandedId === source.id ? null : source.id)
-            }
-          />
-        ))}
+        {filtered.map((source) => {
+          // Validate source has required fields
+          if (!source.id || !source.url || !source.title) {
+            console.warn('Invalid source data:', source);
+            return null;
+          }
+          return (
+            <SourceCard
+              key={source.id}
+              source={source}
+              expanded={expandedId === source.id}
+              onToggle={() =>
+                setExpandedId(expandedId === source.id ? null : source.id)
+              }
+            />
+          );
+        })}
         {filtered.length === 0 ? (
           <div
             className={cn(
@@ -233,22 +243,23 @@ export function SourceExplorer({
 /* ------------------------------------------------------------------ */
 /* Source card                                                         */
 /* ------------------------------------------------------------------ */
-function SourceCard({
-  source,
-  expanded,
-  onToggle,
-}: {
+interface SourceCardProps {
   source: GovernanceSource;
   expanded: boolean;
   onToggle: () => void;
-}) {
-  const host = React.useMemo(() => {
-    try {
-      return new URL(source.url).host.replace(/^www\./, "");
-    } catch {
-      return source.url;
-    }
-  }, [source.url]);
+}
+
+const SourceCard = React.memo(function SourceCard({
+  source,
+  expanded,
+  onToggle,
+}: SourceCardProps) {
+  const host = React.useMemo(() => getSafeHostname(source.url), [source.url]);
+  const safeUrl = React.useMemo(() => sanitizeUrl(source.url), [source.url]);
+  const safeFaviconUrl = React.useMemo(
+    () => (isSafeFaviconUrl(source.faviconUrl) ? source.faviconUrl : null),
+    [source.faviconUrl]
+  );
 
   const tone = confidenceColor(source.relevanceScore);
   const pct = Math.round(
@@ -268,6 +279,11 @@ function SourceCard({
         ? "text-[var(--color-caution-strong)]"
         : "text-[var(--color-refuse-strong)]";
 
+  const barStyle = React.useMemo(() => ({
+    width: `${pct}%`,
+    transition: "width var(--duration-slow) var(--ease-out)",
+  }), [pct]);
+
   return (
     <Card
       elevation={1}
@@ -280,14 +296,20 @@ function SourceCard({
       {/* Top row */}
       <div className="flex items-start justify-between gap-3 p-4 pb-2">
         <div className="flex items-start gap-2.5 min-w-0">
-          {source.faviconUrl ? (
+          {safeFaviconUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={source.faviconUrl}
+              src={safeFaviconUrl}
               alt=""
               className="mt-0.5 h-4 w-4 rounded-sm"
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              onError={(e) => {
+                // Hide broken favicon images
+                e.currentTarget.style.display = 'none';
+              }}
             />
-          ) : source.url.startsWith("http") ? (
+          ) : safeUrl?.startsWith("http") ? (
             <Globe
               className="mt-0.5 h-4 w-4 text-[var(--color-text-muted)] shrink-0"
               aria-hidden
@@ -302,20 +324,27 @@ function SourceCard({
             <h4 className="text-sm font-semibold leading-tight text-[var(--color-text-primary)] truncate">
               {source.title}
             </h4>
-            <a
-              href={source.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                "mt-0.5 inline-flex items-center gap-1 text-xs",
-                "text-[var(--color-text-muted)] hover:text-[var(--color-brand)]",
-                "focus-visible:outline-none focus-visible:underline",
-              )}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <span className="truncate max-w-[200px]">{host}</span>
-              <ExternalLink className="h-3 w-3 shrink-0" />
-            </a>
+            {safeUrl ? (
+              <a
+                href={safeUrl}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className={cn(
+                  "mt-0.5 inline-flex items-center gap-1 text-xs",
+                  "text-[var(--color-text-muted)] hover:text-[var(--color-brand)]",
+                  "focus-visible:outline-none focus-visible:underline",
+                )}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Open external link: ${source.title}`}
+              >
+                <span className="truncate max-w-[200px]">{host}</span>
+                <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+              </a>
+            ) : (
+              <span className="mt-0.5 text-xs text-[var(--color-text-muted)] truncate max-w-[200px]">
+                {host}
+              </span>
+            )}
           </div>
         </div>
 
@@ -351,10 +380,7 @@ function SourceCard({
         >
           <div
             className={cn("h-full rounded-full", barColor)}
-            style={{
-              width: `${pct}%`,
-              transition: "width var(--duration-slow) var(--ease-out)",
-            }}
+            style={barStyle}
           />
         </div>
       </div>
@@ -429,22 +455,24 @@ function SourceCard({
       </div>
     </Card>
   );
-}
+});
 
 /* ------------------------------------------------------------------ */
 /* Filter group                                                        */
 /* ------------------------------------------------------------------ */
+interface FilterGroupProps {
+  label: string;
+  options: string[];
+  value: string | null;
+  onChange: (v: string | null) => void;
+}
+
 function FilterGroup({
   label,
   options,
   value,
   onChange,
-}: {
-  label: string;
-  options: string[];
-  value: string | null;
-  onChange: (v: string | null) => void;
-}) {
+}: FilterGroupProps) {
   if (options.length === 0) return null;
   return (
     <div className="flex items-center gap-1">
