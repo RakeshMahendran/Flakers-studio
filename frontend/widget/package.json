@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node ./scripts/build.mjs",
-    "ci:build": "npm run build"
+    "typecheck": "tsc --noEmit",
+    "ci:build": "npm run typecheck && npm run build"
   },
   "devDependencies": {
     "esbuild": "^0.25.1",
