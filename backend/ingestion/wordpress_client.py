@@ -85,11 +85,28 @@ _WP_NOISE_SELECTORS = [".wp-block-embed", ".video-thumb", ".modal", ".single-vid
 
 
 def clean_wp_html(html_text: str) -> str:
-    """Extract clean text from WordPress HTML content."""
+    """Extract clean text from WordPress HTML content.
+
+    Security: Uses BeautifulSoup with html.parser (stdlib, safe for untrusted
+    input). Removes script/style/iframe tags to prevent code injection in
+    downstream contexts. Fallback regex is conservative and only strips tags.
+    """
     if not html_text or not isinstance(html_text, str):
         return ""
     if "<" not in html_text:
         return html_text.strip()
+
+    # Size limit: refuse to parse extremely large HTML fragments that could
+    # cause DoS via memory exhaustion. Legitimate WordPress content.rendered
+    # fields are typically <1MB; >5MB suggests a data quality issue.
+    MAX_FRAGMENT_SIZE = 5 * 1024 * 1024  # 5 MiB
+    if len(html_text) > MAX_FRAGMENT_SIZE:
+        logger.warning(
+            "clean_wp_html: fragment size %d bytes exceeds %d limit, skipping parse",
+            len(html_text), MAX_FRAGMENT_SIZE
+        )
+        return ""
+
     try:
         soup = BeautifulSoup(html_text, "html.parser")
         for tag in soup(_STRIP_TAGS):
@@ -100,7 +117,8 @@ def clean_wp_html(html_text: str) -> str:
         text = soup.get_text(separator=" ", strip=True)
         text = re.sub(r"\s+", " ", text)
         return text.strip()
-    except Exception:
+    except Exception as exc:
+        logger.debug("BeautifulSoup parse failed, using fallback regex: %s", exc)
         text = re.sub(r"<[^>]+>", " ", html_text)
         return re.sub(r"\s+", " ", text).strip()
 
@@ -131,19 +149,38 @@ async def _fetch_html_fallback(client: httpx.AsyncClient, url: str) -> str:
     Returns ``""`` on any error (network, parse, etc.) — never raises. Uses
     the supplied ``httpx.AsyncClient`` so connection pooling, redirects,
     auth, and headers are inherited from the WordPress client.
+
+    Security: Uses BeautifulSoup with html.parser (stdlib, safe for untrusted
+    input). All script/style/iframe tags are removed before text extraction.
+    Large HTML is handled via BeautifulSoup's incremental parsing; extremely
+    large responses are mitigated by the httpx client timeout (30s default).
     """
     if not url:
         return ""
     try:
         resp = await client.get(url)
         if resp.status_code != 200:
+            logger.debug("HTML fallback for %s returned status %d", url, resp.status_code)
             return ""
+
         html = resp.text or ""
         if not html:
             return ""
 
+        # Size check: skip extremely large HTML (>10MB) that could cause DoS
+        # via memory exhaustion during parsing. Legitimate WordPress pages are
+        # typically <1MB; >10MB suggests scraping a file-download endpoint.
+        MAX_HTML_SIZE = 10 * 1024 * 1024  # 10 MiB
+        if len(html) > MAX_HTML_SIZE:
+            logger.warning(
+                "HTML fallback for %s skipped: response size %d bytes exceeds %d limit",
+                url, len(html), MAX_HTML_SIZE
+            )
+            return ""
+
         soup = BeautifulSoup(html, "html.parser")
         # Strip noise tags up-front so they can't dominate the text count.
+        # This also removes script/style content that could leak into extracted text.
         for tag in soup(_STRIP_TAGS):
             tag.decompose()
         for selector in _WP_NOISE_SELECTORS:
@@ -154,7 +191,8 @@ async def _fetch_html_fallback(client: httpx.AsyncClient, url: str) -> str:
         for selector in _HTML_FALLBACK_SELECTORS:
             try:
                 node = soup.select_one(selector)
-            except Exception:
+            except Exception as exc:
+                logger.debug("Selector '%s' failed for %s: %s", selector, url, exc)
                 node = None
             if not node:
                 continue
@@ -162,6 +200,12 @@ async def _fetch_html_fallback(client: httpx.AsyncClient, url: str) -> str:
             if len(candidate) > len(best_text):
                 best_text = candidate
         return best_text
+    except httpx.TimeoutException as exc:
+        logger.warning("HTML fallback for %s timed out: %s", url, exc)
+        return ""
+    except httpx.HTTPStatusError as exc:
+        logger.debug("HTML fallback for %s HTTP error: %s", url, exc)
+        return ""
     except Exception as exc:  # pragma: no cover — defensive
         logger.debug("HTML fallback failed for %s: %s", url, exc)
         return ""
@@ -501,11 +545,18 @@ class WordPressClient:
                 and self.stats.html_fallback_used < self.config.max_html_fallback_pages
             ):
                 fallback_url = _item_url(item, self.site_url)
-                if fallback_url:
+                # Security: validate fallback URL is http(s) and not a data: or
+                # javascript: URI that could be logged or passed to other systems.
+                if fallback_url and self._is_valid_http_url(fallback_url):
                     fallback_text = await _fetch_html_fallback(client, fallback_url)
                     # Be polite — same throttle as REST pagination.
                     if self.config.delay_between_requests > 0:
                         await asyncio.sleep(self.config.delay_between_requests)
+                elif fallback_url:
+                    logger.warning(
+                        "Skipping invalid fallback URL for item %s: %s",
+                        item.get("id", "unknown"), fallback_url
+                    )
             if fallback_text and len(fallback_text.strip()) >= _MIN_TEXT_LEN:
                 text = fallback_text
                 used_html_fallback = True
@@ -556,6 +607,20 @@ class WordPressClient:
             content_hash=chash,
             extracted_metadata=extracted,
         )
+
+    def _is_valid_http_url(self, url: str) -> bool:
+        """Validate that URL is http(s) and not a dangerous URI scheme.
+
+        Rejects data:, javascript:, file:, etc. URIs that could be used for
+        injection or that httpx would refuse anyway.
+        """
+        if not url or not isinstance(url, str):
+            return False
+        try:
+            parsed = urlparse(url)
+            return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+        except Exception:
+            return False
 
     def _emit_progress(self, endpoint_name: str, page: int, total_so_far: int) -> None:
         if self.progress_callback:

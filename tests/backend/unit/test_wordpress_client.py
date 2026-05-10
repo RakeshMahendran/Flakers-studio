@@ -318,6 +318,54 @@ class WpItemFallbackIntegrationTests(unittest.TestCase):
         # rather than a silent behaviour change.
         self.assertEqual(_MIN_TEXT_LEN, 50)
 
+    def test_invalid_url_schemes_are_rejected(self):
+        # javascript:, data:, file: URIs must not be passed to httpx.
+        client = self._make_client()
+        dangerous_urls = [
+            "javascript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "file:///etc/passwd",
+            "ftp://example.com/x",
+        ]
+        for bad_url in dangerous_urls:
+            item = {
+                "id": 99,
+                "type": "page",
+                "link": bad_url,
+                "title": {"rendered": "Malicious"},
+                "content": {"rendered": ""},
+                "excerpt": {"rendered": ""},
+            }
+            fake_http = _FakeAsyncClient({})  # any GET would raise
+            scraped = _run(client._wp_item_to_scraped_page(fake_http, item, "page"))
+            self.assertIsNone(
+                scraped,
+                f"Item with URL {bad_url!r} should return None without fetch attempt"
+            )
+            # URL validation should prevent the fetch
+            self.assertEqual(
+                fake_http.calls, [],
+                f"Item with URL {bad_url!r} should not trigger HTTP fetch"
+            )
+
+    def test_extremely_large_html_is_rejected(self):
+        # >10MB HTML should be skipped to prevent DoS via memory exhaustion.
+        client = self._make_client()
+        item = _empty_wp_page_item(8)
+
+        # 11 MB of HTML (just repeated content to exceed the limit)
+        giant_html = "<html><body><main>" + ("x" * (11 * 1024 * 1024)) + "</main></body></html>"
+        fake_http = _FakeAsyncClient({
+            "https://example.com/page-8/": _FakeResponse(giant_html)
+        })
+        scraped = _run(client._wp_item_to_scraped_page(fake_http, item, "page"))
+
+        # Should return None because the HTML was too large to parse
+        self.assertIsNone(scraped)
+        self.assertEqual(client.stats.html_fallback_used, 0)
+        # HTTP call was made, but parsing was skipped
+        self.assertEqual(fake_http.calls, ["https://example.com/page-8/"])
+
 
 if __name__ == "__main__":
     unittest.main()
