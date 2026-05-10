@@ -15,8 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FlakersStudio - Tambo AI Powered",
-  description: "Governance-first AI assistant platform for enterprises, enhanced with Tambo AI dynamic components",
+  title: "FlakersStudio — AI assistants that show their work",
+  description:
+    "Governed RAG with source citations, explained refusals, and tenant isolation by design. Six rules enforced server-side.",
 };
 
 export default function RootLayout({
@@ -27,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
           <TamboProviderWrapper>
