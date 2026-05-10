@@ -261,6 +261,14 @@ def compute_is_upcoming(
 
     Evaluated at call time so the answer is always relative to "now". Pass
     ``today`` for deterministic tests.
+
+    **Timezone Handling**: This function compares dates only (YYYY-MM-DD),
+    ignoring time-of-day. WordPress event dates are assumed to be in the
+    site's local timezone. Since we strip the time component, events are
+    considered "upcoming" if their start date is after the current UTC date.
+    For events near midnight in non-UTC timezones, this may introduce up to
+    ±1 day classification error. This is acceptable for most use cases where
+    "upcoming" is a broad filter rather than a precise timestamp comparison.
     """
     if not isinstance(metadata, dict):
         return False

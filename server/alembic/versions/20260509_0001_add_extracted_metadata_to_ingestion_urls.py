@@ -30,7 +30,16 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
         ),
     )
+    # Create GIN index for efficient JSONB queries on extracted metadata
+    # (e.g., WHERE extracted_metadata @> '{"is_event": true}')
+    op.create_index(
+        "idx_ingestion_urls_extracted_metadata",
+        "ingestion_urls",
+        ["extracted_metadata"],
+        postgresql_using="gin",
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("idx_ingestion_urls_extracted_metadata", table_name="ingestion_urls")
     op.drop_column("ingestion_urls", "extracted_metadata")

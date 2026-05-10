@@ -441,7 +441,14 @@ class WordPressClient:
         try:
             extracted = extract_metadata(item, content_type, url)
         except Exception as exc:  # pragma: no cover — defensive
-            logger.debug("metadata extraction failed for %s: %s", url, exc)
+            # Log at WARNING level with context for production debugging
+            item_id = item.get("id", "unknown")
+            acf_keys = list(item.get("acf", {}).keys()) if isinstance(item.get("acf"), dict) else []
+            logger.warning(
+                "Metadata extraction failed for %s (WP ID: %s, ACF keys: %s): %s",
+                url, item_id, acf_keys, exc,
+                exc_info=True,
+            )
             extracted = {}
 
         return ScrapedPage(

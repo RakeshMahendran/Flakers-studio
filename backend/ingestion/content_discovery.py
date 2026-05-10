@@ -142,6 +142,18 @@ class ContentDiscoveryService:
                     language = self.processor._detect_language(page.content)
                     word_count = self.processor._count_words(page.content)
                     
+                    # Validate extracted metadata before database insert
+                    raw_metadata = getattr(page, "extracted_metadata", {}) or {}
+                    try:
+                        from backend.ingestion.metadata_validator import validate_metadata, validate_metadata_size
+                        validated_metadata = validate_metadata(raw_metadata, strict=False)
+                        if not validate_metadata_size(validated_metadata):
+                            logger.warning(f"Metadata for {page.url} exceeds size limit, truncating")
+                            validated_metadata = {}
+                    except Exception as e:
+                        logger.warning(f"Metadata validation failed for {page.url}: {e}")
+                        validated_metadata = {}
+
                     # Store in database
                     url_record = IngestionURL(
                         job_id=job_id,
@@ -155,7 +167,7 @@ class ContentDiscoveryService:
                         raw_content=page.content,
                         content_length=len(page.content),
                         scraped_at=page.scraped_at,
-                        extracted_metadata=getattr(page, "extracted_metadata", {}) or {},
+                        extracted_metadata=validated_metadata,
                     )
                     db.add(url_record)
                 

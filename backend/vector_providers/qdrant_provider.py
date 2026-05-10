@@ -97,6 +97,30 @@ class QdrantVectorStore(VectorStore):
                 )
             except Exception:
                 pass
+
+        # Create indexes for rich metadata fields to enable efficient filtering
+        # on year, categories, event dates, etc. Qdrant requires indexes for fast
+        # filtering on large collections (>10k points).
+        _metadata_indexes = [
+            ("year", PayloadSchemaType.INTEGER),
+            ("month", PayloadSchemaType.INTEGER),
+            ("category_ids", PayloadSchemaType.KEYWORD),
+            ("tag_ids", PayloadSchemaType.KEYWORD),
+            ("is_event", PayloadSchemaType.BOOL),
+            ("event_year", PayloadSchemaType.INTEGER),
+            ("event_month", PayloadSchemaType.INTEGER),
+        ]
+        for field_name, field_type in _metadata_indexes:
+            try:
+                self.client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name=field_name,
+                    field_schema=field_type,
+                )
+            except Exception:
+                # Index may already exist or collection may be in use - continue
+                pass
+
         return collection_name
 
     async def upsert(
