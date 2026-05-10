@@ -153,6 +153,9 @@ class SemanticChunker:
             Defaulted lazily to ``EmbeddingService().embed_texts`` so
             tests can inject a fake without importing Azure.
         tokenizer: a tiktoken Encoding. Defaulted to ``cl100k_base``.
+        max_cache_size: maximum number of sentence embeddings to cache.
+            When exceeded, the cache is cleared to prevent unbounded
+            memory growth. Default 10000 sentences (~40MB for 1536-dim).
     """
 
     def __init__(
@@ -164,16 +167,20 @@ class SemanticChunker:
         max_sentences_per_page: int = 200,
         embedding_fn: Optional[EmbeddingFn] = None,
         tokenizer: Optional["tiktoken.Encoding"] = None,
+        max_cache_size: int = 10000,
     ) -> None:
         if target_min <= 0 or target_max <= target_min:
             raise ValueError("target_max must be greater than target_min > 0")
         if overlap_tokens < 0 or overlap_tokens >= target_min:
             raise ValueError("overlap_tokens must be in [0, target_min)")
+        if max_cache_size < 0:
+            raise ValueError("max_cache_size must be non-negative")
         self.target_min = target_min
         self.target_max = target_max
         self.overlap_tokens = overlap_tokens
         self.similarity_threshold = similarity_threshold
         self.max_sentences_per_page = max_sentences_per_page
+        self.max_cache_size = max_cache_size
         self._embedding_fn = embedding_fn
         self.tokenizer = tokenizer or tiktoken.get_encoding("cl100k_base")
         # Cache: sentence text -> embedding vector. Survives across
@@ -246,6 +253,8 @@ class SemanticChunker:
     # ------------------------------------------------------------------ #
 
     def _token_count(self, text: str) -> int:
+        if not text:
+            return 0
         return len(self.tokenizer.encode(text))
 
     async def _embed_sentences(self, sentences: List[str]) -> List[List[float]]:
@@ -265,14 +274,42 @@ class SemanticChunker:
 
         if unique_misses:
             fn = self._get_embedding_fn()
-            new_vectors = await fn(unique_misses)
+            try:
+                new_vectors = await fn(unique_misses)
+            except Exception as e:
+                logger.error(
+                    "Embedding provider failed for %d sentences: %s",
+                    len(unique_misses),
+                    e,
+                )
+                raise RuntimeError(
+                    f"Embedding provider failed: {str(e)}"
+                ) from e
+
             if len(new_vectors) != len(unique_misses):
                 raise RuntimeError(
                     f"Embedding provider returned {len(new_vectors)} "
                     f"vectors for {len(unique_misses)} sentences"
                 )
             for s, v in zip(unique_misses, new_vectors):
+                if not isinstance(v, (list, tuple)) or len(v) == 0:
+                    raise RuntimeError(
+                        f"Invalid embedding vector returned for sentence "
+                        f"(expected non-empty sequence, got {type(v).__name__})"
+                    )
                 self._embedding_cache[s] = v
+
+            # Memory guard: clear cache if it grows too large
+            if (
+                self.max_cache_size > 0
+                and len(self._embedding_cache) > self.max_cache_size
+            ):
+                logger.warning(
+                    "Embedding cache exceeded max size (%d > %d); clearing cache",
+                    len(self._embedding_cache),
+                    self.max_cache_size,
+                )
+                self._embedding_cache.clear()
 
         return [self._embedding_cache[s] for s in sentences]
 
@@ -291,10 +328,22 @@ class SemanticChunker:
         """Return indices ``i`` such that the boundary lies BEFORE
         sentence ``i``. Index 0 is implicit (always a boundary).
         """
+        if len(embeddings) < 2:
+            return []
+
         boundaries: List[int] = []
         for i in range(1, len(embeddings)):
-            sim = _cosine_similarity(embeddings[i - 1], embeddings[i])
-            if sim < self.similarity_threshold:
+            try:
+                sim = _cosine_similarity(embeddings[i - 1], embeddings[i])
+                if sim < self.similarity_threshold:
+                    boundaries.append(i)
+            except (ValueError, ZeroDivisionError) as e:
+                logger.warning(
+                    "Failed to compute similarity at index %d: %s. "
+                    "Treating as boundary.",
+                    i,
+                    e,
+                )
                 boundaries.append(i)
         return boundaries
 
@@ -329,14 +378,24 @@ class SemanticChunker:
           merge regardless, even if that briefly exceeds target_max,
           rather than ship a useless 30-token chunk.
         """
+        if not groups:
+            return []
+
         # First, hard-split anything above the ceiling.
         capped: List[str] = []
         for g in groups:
+            if not g or not g.strip():
+                continue
             capped.extend(self._split_oversize(g))
+
+        if not capped:
+            return []
 
         # Now merge undersize chunks into neighbours.
         merged: List[str] = []
         for piece in capped:
+            if not piece or not piece.strip():
+                continue
             tok = self._token_count(piece)
             if tok < self.target_min and merged:
                 combined = (merged[-1] + " " + piece).strip()
@@ -374,6 +433,9 @@ class SemanticChunker:
         next one would exceed ``target_max``, then start a new buffer.
         Sentences that are themselves over the cap are token-sliced.
         """
+        if not text or not text.strip():
+            return []
+
         if self._token_count(text) <= self.target_max:
             return [text]
 
@@ -385,6 +447,8 @@ class SemanticChunker:
         buf: List[str] = []
         buf_tokens = 0
         for s in sentences:
+            if not s or not s.strip():
+                continue
             s_tokens = self._token_count(s)
             if s_tokens > self.target_max:
                 # Flush current buf, then hard-slice the runaway sentence.
@@ -393,12 +457,16 @@ class SemanticChunker:
                     buf, buf_tokens = [], 0
                 out.extend(self._token_slice(s))
                 continue
-            if buf_tokens + s_tokens > self.target_max:
-                out.append(" ".join(buf))
+            # Account for space separator in token count when adding to buffer
+            space_adjustment = 1 if buf else 0
+            if buf_tokens + s_tokens + space_adjustment > self.target_max:
+                if buf:
+                    out.append(" ".join(buf))
                 buf, buf_tokens = [s], s_tokens
             else:
                 buf.append(s)
-                buf_tokens += s_tokens
+                # Recalculate exact token count for buffer to avoid drift
+                buf_tokens = self._token_count(" ".join(buf))
         if buf:
             out.append(" ".join(buf))
         return out
@@ -423,7 +491,14 @@ class SemanticChunker:
 
         out: List[str] = [chunks[0]]
         for prev, cur in zip(chunks[:-1], chunks[1:]):
-            tail_tokens = self.tokenizer.encode(prev)[-self.overlap_tokens :]
+            if not prev or not cur:
+                out.append(cur if cur else "")
+                continue
+            prev_tokens = self.tokenizer.encode(prev)
+            # Guard: if the previous chunk has fewer tokens than overlap_tokens,
+            # use all available tokens instead of negative indexing.
+            overlap_start = max(0, len(prev_tokens) - self.overlap_tokens)
+            tail_tokens = prev_tokens[overlap_start:]
             tail = self.tokenizer.decode(tail_tokens).strip()
             if tail:
                 out.append((tail + " " + cur).strip())
@@ -435,14 +510,29 @@ class SemanticChunker:
         """Legacy fixed-token chunker, used when semantic chunking is
         infeasible (oversize page, etc).
         """
+        if not text or not text.strip():
+            return []
+
         tokens = self.tokenizer.encode(text)
+        if not tokens:
+            return []
+
         if len(tokens) <= self.target_max:
-            return [text.strip()] if text.strip() else []
+            stripped = text.strip()
+            if stripped and not is_corrupted_chunk(stripped):
+                return [stripped]
+            return []
 
         chunks: List[str] = []
         step = self.target_max - self.overlap_tokens
         if step <= 0:
+            logger.warning(
+                "overlap_tokens (%d) >= target_max (%d); using step=target_max",
+                self.overlap_tokens,
+                self.target_max,
+            )
             step = self.target_max
+
         start = 0
         while start < len(tokens):
             end = start + self.target_max
