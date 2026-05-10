@@ -24,6 +24,8 @@ from backend.services.embeddings import EmbeddingService
 from backend.retrieval.retrieval_service import RetrievalService
 from backend.retrieval.fast_intent import FastIntentResult, detect_fast_intent
 from backend.retrieval.filter_extractor import FilterExtractor, FilterResult
+from backend.retrieval.factual_overrides import FactualOverrideStore
+from backend.retrieval.reranker import rerank
 from backend.retrieval.prompt_builder import (
     detect_response_mode,
     get_synthesis_system_prompt,
@@ -160,6 +162,21 @@ class RAGPipeline:
                 assistant.id,
                 sorted(payload_filters.keys()) if payload_filters else [],
                 used_fallback,
+            )
+
+            # Re-ranking: apply recency boost + factual overrides
+            override_store = FactualOverrideStore.from_assistant(assistant)
+            matched_override = override_store.find_match(user_message)
+            if matched_override is not None:
+                logger.info(
+                    "Factual override matched for query (triggers=%s source=%s)",
+                    matched_override.trigger_keywords,
+                    matched_override.source_url,
+                )
+            retrieved_chunks = rerank(
+                hits=retrieved_chunks,
+                query=user_message,
+                override=matched_override,
             )
 
             if not retrieved_chunks:
