@@ -395,11 +395,12 @@ function TopBar({
         type="button"
         onClick={onOpenMobileNav}
         className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-md md:hidden",
+          "inline-flex h-9 w-9 min-h-[44px] min-w-[44px] items-center justify-center rounded-md md:hidden",
           "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-sunken)]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
         )}
-        aria-label="Open navigation"
+        aria-label="Open navigation menu"
+        aria-expanded="false"
       >
         <Menu className="h-4 w-4" />
       </button>
@@ -479,9 +480,9 @@ function TopBar({
       <div className="ml-2 flex items-center gap-1">
         <button
           type="button"
-          aria-label="Notifications"
+          aria-label="Notifications. You have new notifications."
           className={cn(
-            "relative inline-flex h-9 w-9 items-center justify-center rounded-md",
+            "relative inline-flex h-9 w-9 min-h-[44px] min-w-[44px] items-center justify-center rounded-md",
             "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text-primary)]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
           )}
@@ -493,14 +494,16 @@ function TopBar({
               "bg-[var(--color-trust)]"
             )}
             aria-hidden
+            role="status"
           />
         </button>
         <button
           type="button"
           onClick={onToggleTheme}
           aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          aria-live="polite"
           className={cn(
-            "inline-flex h-9 w-9 items-center justify-center rounded-md",
+            "inline-flex h-9 w-9 min-h-[44px] min-w-[44px] items-center justify-center rounded-md",
             "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text-primary)]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
           )}

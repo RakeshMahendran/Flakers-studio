@@ -91,15 +91,22 @@ export function useCommandPalette() {
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Support both Cmd (Mac) and Ctrl (Windows/Linux)
       const isMod = e.metaKey || e.ctrlKey;
       if (isMod && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
+        e.stopPropagation();
         setOpen((prev) => !prev);
       }
+      // Also support Escape to close when open
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        setOpen(false);
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
+  }, [open]);
 
   return { open, setOpen };
 }
@@ -142,6 +149,12 @@ export function CommandPalette({
   /* Build the full item list — quick actions first, then assistants,
    * then recent, then help. */
   const items = React.useMemo<PaletteItem[]>(() => {
+    // Sanitize function to prevent command injection
+    const sanitizeRoute = (route: string): string => {
+      // Only allow alphanumeric, dash, slash, and underscore characters
+      return route.replace(/[^a-zA-Z0-9\-/_]/g, '');
+    };
+
     const out: PaletteItem[] = [
       {
         id: "create-assistant",
@@ -153,7 +166,7 @@ export function CommandPalette({
         keywords: ["new", "create", "assistant", "bot"],
         onSelect: () => {
           close();
-          router.push("/assistant/create");
+          router.push(sanitizeRoute("/assistant/create"));
         },
       },
       {
@@ -165,7 +178,7 @@ export function CommandPalette({
         keywords: ["pdf", "upload", "documents", "files", "knowledge"],
         onSelect: () => {
           close();
-          router.push("/assistant/create");
+          router.push(sanitizeRoute("/assistant/create"));
         },
       },
       {
@@ -177,7 +190,7 @@ export function CommandPalette({
         keywords: ["wordpress", "site", "crawl", "source"],
         onSelect: () => {
           close();
-          router.push("/assistant/create");
+          router.push(sanitizeRoute("/assistant/create"));
         },
       },
       {
@@ -190,7 +203,7 @@ export function CommandPalette({
         keywords: ["settings", "preferences", "config"],
         onSelect: () => {
           close();
-          router.push("/dashboard");
+          router.push(sanitizeRoute("/settings"));
         },
       },
       {
@@ -202,14 +215,16 @@ export function CommandPalette({
         keywords: ["governance", "rules", "policy", "shield"],
         onSelect: () => {
           close();
-          router.push("/dashboard");
+          router.push(sanitizeRoute("/settings/governance"));
         },
       },
     ];
 
     for (const a of assistants) {
+      // Sanitize assistant IDs to prevent injection
+      const safeId = sanitizeRoute(a.id);
       out.push({
-        id: `assistant-${a.id}`,
+        id: `assistant-${safeId}`,
         label: a.name,
         hint: a.description,
         icon: Bot,
@@ -217,14 +232,16 @@ export function CommandPalette({
         keywords: [a.name.toLowerCase(), "assistant", "bot", "chat"],
         onSelect: () => {
           close();
-          router.push(`/assistant/${a.id}`);
+          router.push(`/assistant/${safeId}`);
         },
       });
     }
 
     for (const r of recents) {
+      // Sanitize recent IDs to prevent injection
+      const safeId = sanitizeRoute(r.id);
       out.push({
-        id: `recent-${r.id}`,
+        id: `recent-${safeId}`,
         label: r.name,
         hint: "Recent chat",
         icon: MessageSquare,
@@ -232,7 +249,7 @@ export function CommandPalette({
         keywords: [r.name.toLowerCase(), "recent", "chat"],
         onSelect: () => {
           close();
-          router.push(`/assistant/${r.id}`);
+          router.push(`/assistant/${safeId}`);
         },
       });
     }
@@ -318,9 +335,43 @@ export function CommandPalette({
       `[data-index="${active}"]`
     );
     if (el) {
-      el.scrollIntoView({ block: "nearest" });
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }, [active, filtered.length]);
+
+  /* Trap focus within the dialog when open */
+  React.useEffect(() => {
+    if (!open) return;
+
+    const dialog = document.querySelector('[role="dialog"]');
+    if (!dialog) return;
+
+    const focusableElements = dialog.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement?.focus();
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement?.focus();
+        }
+      }
+    };
+
+    dialog.addEventListener('keydown', handleTab);
+    return () => dialog.removeEventListener('keydown', handleTab);
+  }, [open]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "ArrowDown") {

@@ -77,7 +77,7 @@ interface TileProps {
   children?: React.ReactNode;
 }
 
-function Tile({ label, value, delta, series, tone, icon: Icon, children }: TileProps) {
+const Tile = React.memo(function Tile({ label, value, delta, series, tone, icon: Icon, children }: TileProps) {
   const ArrowIcon =
     delta && (delta.lowerIsBetter ? delta.value < 0 : delta.value >= 0)
       ? ArrowUpRight
@@ -87,7 +87,8 @@ function Tile({ label, value, delta, series, tone, icon: Icon, children }: TileP
       className={cn(
         "relative flex flex-col gap-3 rounded-xl border p-4",
         "border-[var(--color-border-subtle)] bg-[var(--color-surface)]",
-        "shadow-[var(--elevation-1)]"
+        "shadow-[var(--elevation-1)]",
+        "min-w-0" // Prevent overflow on small screens
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -121,11 +122,14 @@ function Tile({ label, value, delta, series, tone, icon: Icon, children }: TileP
       {children}
     </div>
   );
-}
+});
 
-export function KpiTiles({ data }: KpiTilesProps) {
+export const KpiTiles = React.memo(function KpiTiles({ data }: KpiTilesProps) {
   return (
-    <section aria-label="Workspace analytics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <section
+      aria-label="Workspace analytics"
+      className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+    >
       <Tile
         label="Total chats"
         value={formatCount(data.totalChats)}
@@ -154,13 +158,15 @@ export function KpiTiles({ data }: KpiTilesProps) {
         <Popover.Trigger asChild>
           <button
             type="button"
+            aria-label="Refusals breakdown. Click for details by governance rule."
             className={cn(
               "group relative flex flex-col gap-3 rounded-xl border p-4 text-left",
               "border-[var(--color-border-subtle)] bg-[var(--color-surface)]",
               "shadow-[var(--elevation-1)]",
               "transition-[border-color,box-shadow] duration-[var(--duration-base)]",
               "hover:border-[var(--color-refuse-border)] hover:shadow-[var(--elevation-2)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
+              "min-h-[44px]" // Ensure touch target size
             )}
           >
             <div className="flex items-center justify-between gap-2">
@@ -220,4 +226,4 @@ export function KpiTiles({ data }: KpiTilesProps) {
       </Popover.Root>
     </section>
   );
-}
+});

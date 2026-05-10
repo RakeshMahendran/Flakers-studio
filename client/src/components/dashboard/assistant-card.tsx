@@ -117,7 +117,7 @@ function formatChats(n: number): string {
   return n.toString();
 }
 
-export function AssistantCard({
+export const AssistantCard = React.memo(function AssistantCard({
   assistant,
   onSelect,
   onSettings,
@@ -211,9 +211,10 @@ export function AssistantCard({
             <button
               type="button"
               onClick={(e) => e.stopPropagation()}
-              aria-label="More actions"
+              aria-label="More actions for assistant"
+              aria-haspopup="menu"
               className={cn(
-                "relative inline-flex h-7 w-7 items-center justify-center rounded-md",
+                "relative inline-flex h-7 w-7 min-h-[44px] min-w-[44px] items-center justify-center rounded-md",
                 "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text-primary)]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
               )}
@@ -304,9 +305,9 @@ export function AssistantCard({
       </div>
     </div>
   );
-}
+});
 
-function Stat({
+const Stat = React.memo(function Stat({
   icon: Icon,
   label,
   value,
@@ -331,4 +332,4 @@ function Stat({
       </span>
     </div>
   );
-}
+});

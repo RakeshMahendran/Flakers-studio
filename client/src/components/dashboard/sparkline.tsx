@@ -37,7 +37,7 @@ export interface SparklineProps extends Omit<React.SVGProps<SVGSVGElement>, "poi
   ariaLabel?: string;
 }
 
-export function Sparkline({
+export const Sparkline = React.memo(function Sparkline({
   data,
   tone = "trust",
   area = true,
@@ -51,6 +51,37 @@ export function Sparkline({
   const reactId = React.useId();
   const gradId = reactId.replace(/:/g, "");
 
+  // Memoize path calculations to avoid recalculating on every render
+  const { linePath, areaPath, stroke } = React.useMemo(() => {
+    if (!data || data.length < 2) {
+      return { linePath: "", areaPath: "", stroke: STROKE_VAR[tone] };
+    }
+
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+    const stepX = width / (data.length - 1);
+    const padY = strokeWidth + 1;
+    const innerH = height - padY * 2;
+
+    const points = data.map((v, i) => {
+      const x = i * stepX;
+      const y = padY + innerH - ((v - min) / range) * innerH;
+      return [x, y] as const;
+    });
+
+    const linePath = points
+      .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`)
+      .join(" ");
+
+    const areaPath =
+      `${linePath} L${(width).toFixed(2)},${height.toFixed(2)} L0,${height.toFixed(2)} Z`;
+
+    const stroke = STROKE_VAR[tone];
+
+    return { linePath, areaPath, stroke };
+  }, [data, tone, width, height, strokeWidth]);
+
   if (!data || data.length < 2) {
     return (
       <svg
@@ -63,28 +94,6 @@ export function Sparkline({
       />
     );
   }
-
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const stepX = width / (data.length - 1);
-  const padY = strokeWidth + 1;
-  const innerH = height - padY * 2;
-
-  const points = data.map((v, i) => {
-    const x = i * stepX;
-    const y = padY + innerH - ((v - min) / range) * innerH;
-    return [x, y] as const;
-  });
-
-  const linePath = points
-    .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`)
-    .join(" ");
-
-  const areaPath =
-    `${linePath} L${(width).toFixed(2)},${height.toFixed(2)} L0,${height.toFixed(2)} Z`;
-
-  const stroke = STROKE_VAR[tone];
 
   return (
     <svg
@@ -113,7 +122,8 @@ export function Sparkline({
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
-}
+});
