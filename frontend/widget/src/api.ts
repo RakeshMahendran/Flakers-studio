@@ -38,6 +38,7 @@ export async function postChat(
       user_message: message,
       session_id: sessionId,
     }),
+    credentials: "omit", // SECURITY: Never send cookies cross-origin
   });
 
   if (!res.ok) {
@@ -58,6 +59,7 @@ export async function fetchWidgetConfig(opts: ResolvedOptions): Promise<ServerWi
   const res = await fetch(widgetConfigEndpoint(opts), {
     method: "GET",
     headers: authHeaders(opts),
+    credentials: "omit", // SECURITY: Never send cookies cross-origin
   });
   if (!res.ok) {
     throw new Error(`Widget config request failed (${res.status})`);

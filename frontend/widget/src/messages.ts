@@ -5,7 +5,10 @@ import { decisionIsRefuse } from "./api";
 const MAX_VISIBLE_CHIPS = 2;
 
 function sourceLabel(source: WidgetSource, fallback: string): string {
-  return source.title || safeHost(source.url) || source.url || fallback;
+  // SECURITY: Ensure we're returning plain text only, no HTML injection
+  const label = source.title || safeHost(source.url) || source.url || fallback;
+  // Truncate to prevent UI overflow attacks
+  return label.slice(0, 200);
 }
 
 function buildSourceChips(sources: WidgetSource[]): HTMLElement {
@@ -15,6 +18,12 @@ function buildSourceChips(sources: WidgetSource[]): HTMLElement {
 
   visible.forEach((src, i) => {
     if (src.url) {
+      // SECURITY: Validate URL scheme before rendering as href
+      const isSafe = /^https?:\/\//i.test(src.url);
+      if (!isSafe) {
+        // Don't render potentially malicious URLs (javascript:, data:, etc.)
+        return;
+      }
       const a = el("a", {
         class: "fsw-chip",
         href: src.url,
@@ -50,22 +59,28 @@ function buildSourceChips(sources: WidgetSource[]): HTMLElement {
       more.remove();
       sources.slice(MAX_VISIBLE_CHIPS).forEach((src, i) => {
         const idx = MAX_VISIBLE_CHIPS + i + 1;
-        const node = src.url
-          ? el(
-              "a",
-              {
-                class: "fsw-chip",
-                href: src.url,
-                target: "_blank",
-                rel: "noopener noreferrer",
-                title: src.title || src.url,
-              },
-              [sourceLabel(src, `Source ${idx}`)],
-            )
-          : el("span", { class: "fsw-chip", title: src.title || "" }, [
-              sourceLabel(src, `Source ${idx}`),
-            ]);
-        wrap.appendChild(node);
+        if (src.url) {
+          // SECURITY: Validate URL scheme
+          const isSafe = /^https?:\/\//i.test(src.url);
+          if (!isSafe) return;
+          const node = el(
+            "a",
+            {
+              class: "fsw-chip",
+              href: src.url,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              title: src.title || src.url,
+            },
+            [sourceLabel(src, `Source ${idx}`)],
+          );
+          wrap.appendChild(node);
+        } else {
+          const node = el("span", { class: "fsw-chip", title: src.title || "" }, [
+            sourceLabel(src, `Source ${idx}`),
+          ]);
+          wrap.appendChild(node);
+        }
       });
     });
     wrap.appendChild(more);

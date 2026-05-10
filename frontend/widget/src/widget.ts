@@ -187,8 +187,19 @@ export function createWidget(rawOptions: FlakersWidgetOptions): WidgetInstance {
   const header = el("header", { class: "fsw-header" });
   const avatar = el("div", { class: "fsw-avatar" });
   if (opts.logoUrl) {
-    const img = el("img", { src: opts.logoUrl, alt: "" });
-    avatar.appendChild(img);
+    // SECURITY: Validate logo URL to prevent data: or javascript: URIs
+    const isSafe = /^https?:\/\//i.test(opts.logoUrl);
+    if (isSafe) {
+      const img = el("img", { src: opts.logoUrl, alt: "" });
+      // Add error handler to fallback to initials if image fails to load
+      img.addEventListener("error", () => {
+        img.remove();
+        avatar.textContent = initials(opts.assistantName || opts.title);
+      });
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = initials(opts.assistantName || opts.title);
+    }
   } else {
     avatar.textContent = initials(opts.assistantName || opts.title);
   }
@@ -457,6 +468,7 @@ export function createWidget(rawOptions: FlakersWidgetOptions): WidgetInstance {
     if (!isOpen) return;
     if (e.key === "Escape") {
       e.stopPropagation();
+      e.preventDefault(); // Prevent host page from also handling Escape
       setOpen(false);
       return;
     }
@@ -466,13 +478,14 @@ export function createWidget(rawOptions: FlakersWidgetOptions): WidgetInstance {
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       const active = (host.getRootNode() as ShadowRoot).activeElement as HTMLElement | null;
+      // ACCESSIBILITY: Proper focus trap - ensure Tab cycles within dialog
       if (e.shiftKey) {
         if (active === first || !panel.contains(active)) {
           e.preventDefault();
           last.focus();
         }
       } else {
-        if (active === last) {
+        if (active === last || !panel.contains(active)) {
           e.preventDefault();
           first.focus();
         }

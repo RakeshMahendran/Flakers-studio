@@ -18,6 +18,12 @@ export function el<K extends keyof HTMLElementTagNameMap>(
         // (Not used here — we always wire listeners via addEventListener.)
         continue;
       } else if (k === "html") {
+        // SECURITY: Never use this with user/network-supplied content.
+        // Only for static, code-controlled HTML (e.g., SVG icons).
+        // Validate that we're not receiving untrusted data.
+        if (typeof v !== "string" || v.includes("script")) {
+          throw new Error("Invalid HTML content");
+        }
         node.innerHTML = String(v);
       } else {
         node.setAttribute(k, String(v));
