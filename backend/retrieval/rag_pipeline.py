@@ -326,6 +326,15 @@ Guidelines:
 
     @staticmethod
     def is_small_talk(user_message: str) -> bool:
+        # NOTE: This method is DEPRECATED in favor of detect_fast_intent()
+        # in backend.retrieval.fast_intent. It remains here as a fallback
+        # only for the case where no context is found (line 101), which
+        # happens AFTER the fast-path check has already run.
+        #
+        # TODO: Consider removing this method entirely and handling the
+        # no-context case differently, since detect_fast_intent() already
+        # catches greetings/thanks/goodbye. This duplication creates
+        # maintenance burden and potential inconsistency.
         if not user_message:
             return False
         text = user_message.strip().lower()

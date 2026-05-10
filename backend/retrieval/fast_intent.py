@@ -55,8 +55,16 @@ class FastIntentResult:
 # lower-cased query so partial matches (e.g. "hi how do I cancel") never
 # fire. The trailing ``[\s!.?]*`` allows polite punctuation/whitespace
 # without admitting any extra words.
+#
+# SECURITY NOTE: The + quantifiers are bounded by the max length check in
+# detect_fast_intent(), which rejects inputs >100 chars BEFORE regex matching.
+# This prevents ReDoS from patterns like "hiiiii...". The quantifiers match
+# casual repetition (hiii, heyyyy) but won't cause catastrophic backtracking.
+#
+# The {1,10} bounds on repeating chars prevent "hiiiiiiiiiiiiiiii" (16 i's)
+# from matching while still allowing natural casual typing like "hiii".
 _GREETING_RE = re.compile(
-    r"^(hi+|hello+|hey+|yo+|good (morning|afternoon|evening))[\s!.?]*$",
+    r"^(hi{1,10}|hello{1,10}|hey{1,10}|yo{1,10}|good (morning|afternoon|evening))[\s!.?]*$",
     re.IGNORECASE,
 )
 _THANKS_RE = re.compile(
@@ -75,6 +83,13 @@ _NEGATION_RE = re.compile(
     r"^(no|nope|nah)[\s!.?]*$",
     re.IGNORECASE,
 )
+
+# Maximum input length to prevent ReDoS and performance issues.
+# 100 chars is sufficient for any greeting/thanks/goodbye (longest is
+# "good morning" at 12 chars). Longer inputs are likely real questions
+# and should fall through to the RAG pipeline. This limit is checked
+# BEFORE regex matching for defense in depth.
+_MAX_QUERY_LENGTH = 100
 
 
 def _safe_name(assistant_name: Optional[str]) -> str:
@@ -143,11 +158,21 @@ def detect_fast_intent(
     Returns:
         A ``FastIntentResult`` on a match, or ``None`` to indicate the
         caller should run the normal RAG pipeline.
+
+    Security:
+        - Input length is capped at _MAX_QUERY_LENGTH before regex matching
+          to prevent ReDoS attacks.
+        - All patterns use ^ and $ anchors to prevent partial matches.
+        - Repeating character quantifiers are bounded (e.g., hi{1,10} not hi+).
     """
     if not query:
         return None
     text = query.strip()
     if not text:
+        return None
+
+    # Length check BEFORE regex matching to prevent ReDoS
+    if len(text) > _MAX_QUERY_LENGTH:
         return None
 
     name = _safe_name(assistant_name)
