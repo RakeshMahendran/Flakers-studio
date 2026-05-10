@@ -164,8 +164,19 @@ class ContentDiscoveryService:
                 job.urls_scraped = len(scraped_pages)
                 # Don't set completed_at yet - job isn't fully complete until ingestion finishes
                 await db.commit()
-                
+
                 logger.info(f"Job {job_id}: Discovery completed - {len(scraped_pages)} pages stored in database, ready for ingestion")
+
+                # If Celery is enabled, enqueue ingestion task directly
+                from backend.config.settings import settings
+                if getattr(settings, 'USE_CELERY', False):
+                    try:
+                        from backend.queue.tasks import run_ingestion_job
+                        task = run_ingestion_job.delay(job_id)
+                        logger.info(f"Job {job_id}: Enqueued to Celery for ingestion (task_id={task.id})")
+                    except Exception as celery_error:
+                        logger.error(f"Job {job_id}: Failed to enqueue to Celery: {str(celery_error)}")
+                        # Don't fail the job - the polling worker will pick it up as fallback
                 
         except Exception as e:
             logger.error(f"Job {job_id}: Discovery failed - {str(e)}", exc_info=True)

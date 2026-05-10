@@ -42,8 +42,11 @@ class Settings(BaseSettings):
     AZURE_SUBSCRIPTION_ID: str = ""
     AZURE_LOCATION: str = ""
     
-    # Redis (Optional - for caching and background jobs)
-    # REDIS_URL: str = "redis://localhost:6379"
+    # Redis (for caching and Celery task queue)
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Celery task queue (set to False to use old polling worker as fallback)
+    USE_CELERY: bool = True
     
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"

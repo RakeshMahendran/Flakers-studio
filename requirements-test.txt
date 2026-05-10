@@ -1,0 +1,21 @@
+# Test dependencies for FlakersStudio
+
+# Core test dependencies
+pytest>=8.0
+pytest-asyncio>=0.23
+pytest-cov>=4.1
+pytest-mock>=3.12
+
+# Celery testing
+pytest-celery>=0.0.0
+fakeredis>=2.21
+
+# Code quality
+black>=24.0
+flake8>=7.0
+mypy>=1.8
+
+# Additional testing utilities
+freezegun>=1.4  # Time mocking
+factory-boy>=3.3  # Test fixtures
+faker>=22.0  # Fake data generation

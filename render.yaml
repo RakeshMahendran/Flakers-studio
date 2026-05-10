@@ -13,3 +13,17 @@ services:
         value: 1
       - key: PYTHONUNBUFFERED
         value: 1
+
+  - type: worker
+    name: flakers-celery
+    env: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    plan: starter  # 512MB RAM
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A backend.queue.celery_app worker --loglevel=info --concurrency=4 --pool=solo --queues=ingestion
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: USE_CELERY
+        value: true
