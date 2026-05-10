@@ -35,6 +35,7 @@ lxml_html_clean==0.4.1
 readability-lxml==0.8.1
 reportlab==4.0.7
 
-# Redis and Celery - Optional for caching and background jobs
-# redis==5.2.1
-# celery==5.4.0
+# Redis and Celery - For caching and background jobs
+redis>=5.0
+celery>=5.3
+flower>=2.0  # Optional Celery monitoring UI
