@@ -29,7 +29,7 @@ authoritative and to never invent content outside it.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 ResponseMode = Literal["concise", "enumeration", "elaborate"]
@@ -95,16 +95,20 @@ def _temporal_anchors(today: datetime) -> str:
 
     LLMs often have stale notions of "now"; we resolve common relative
     references against ``today`` so the model never has to.
+
+    Security: This function only computes dates from the datetime object;
+    no user input is interpolated here.
     """
     year = today.year
+    date_str = today.strftime('%Y-%m-%d')
     return (
-        f"CURRENT DATE: {today.strftime('%Y-%m-%d')}\n"
+        f"CURRENT DATE: {date_str}\n"
         f"TEMPORAL ANCHORS:\n"
         f"- last year = {year - 1}\n"
         f"- two years ago = {year - 2}\n"
         f"- this year = {year}\n"
         f"- next year = {year + 1}\n"
-        f"- upcoming = date > today ({today.strftime('%Y-%m-%d')})\n"
+        f"- upcoming = date > today ({date_str})\n"
         f"- recent / lately = within the last 12 months from today"
     )
 
@@ -119,6 +123,22 @@ _ANTI_PATTERNS = (
 )
 
 
+def _sanitize_assistant_name(name: str) -> str:
+    """Sanitize assistant name to prevent prompt injection.
+
+    Security: Assistant names come from the database and are user-controlled.
+    We must prevent prompt injection by removing newlines and limiting length.
+    """
+    if not name:
+        return "this assistant"
+    # Remove newlines and control characters that could break prompt structure
+    sanitized = " ".join(name.split())
+    # Limit length to prevent prompt stuffing
+    if len(sanitized) > 100:
+        sanitized = sanitized[:97] + "..."
+    return sanitized or "this assistant"
+
+
 def get_synthesis_system_prompt(
     assistant_name: str,
     mode: str = "concise",
@@ -128,6 +148,7 @@ def get_synthesis_system_prompt(
     Args:
         assistant_name: Display name of the assistant (used to scope
             the persona; never used to pull external knowledge).
+            Will be sanitized to prevent prompt injection.
         mode: One of ``concise``, ``enumeration``, ``elaborate``. Other
             values fall back to ``concise``.
 
@@ -137,11 +158,16 @@ def get_synthesis_system_prompt(
         append the retrieved context and conversation history to the
         user message (or to this prompt) exactly as before — this
         function only owns the *instruction* portion.
+
+    Security:
+        - assistant_name is sanitized to prevent prompt injection
+        - temporal_anchors contains no user input
+        - mode is validated against VALID_MODES
     """
-    safe_name = assistant_name or "this assistant"
+    safe_name = _sanitize_assistant_name(assistant_name)
     resolved_mode = mode if mode in VALID_MODES else "concise"
 
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
     temporal_block = _temporal_anchors(today)
     length_block = _length_rules(resolved_mode)
 
@@ -185,7 +211,7 @@ def get_filter_extraction_system_prompt() -> str:
     Returns a JSON-only extraction prompt: the model must output a
     single JSON object with the inferred filters and nothing else.
     """
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
     return f"""You are a query filter extractor. Your only job is to read a user's natural-language query and emit a single JSON object describing structured filters.
 
 CURRENT DATE: {today.strftime('%Y-%m-%d')}
