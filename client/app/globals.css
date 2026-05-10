@@ -1,128 +1,766 @@
 @import "tailwindcss";
+@import "../src/styles/animations.css";
 
 @custom-variant dark (&:is(.dark *));
 
+/* =====================================================================
+ * FlakersStudio Design System — Phase 0 Foundations
+ *
+ * Token layers:
+ *   1. BASE        Raw OKLCH ramps (brand, accent, governance, neutrals)
+ *   2. SEMANTIC    Purpose-driven tokens (light + dark) — what UI consumes
+ *   3. COMPONENT   Per-pattern tokens (cards, buttons, inputs, chips)
+ *
+ * Backwards-compat aliases for the legacy shadcn-style tokens
+ * (`--background`, `--card`, `--primary`, `--border`, etc.) are preserved
+ * so existing screens keep rendering while other branches migrate.
+ * ===================================================================== */
+
 :root {
-  --font-size: 16px;
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
-  --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
-  --destructive: #d4183d;
-  --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
-  --input: transparent;
-  --input-background: #f3f3f5;
-  --switch-background: #cbced4;
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* -------------------------------------------------------------------
+   * 1. BASE TOKENS  (raw OKLCH — never reference directly in components)
+   * ------------------------------------------------------------------- */
+
+  /* Brand — indigo */
+  --brand-50:  oklch(0.98 0.02 270);
+  --brand-100: oklch(0.95 0.04 270);
+  --brand-200: oklch(0.90 0.07 270);
+  --brand-300: oklch(0.82 0.11 270);
+  --brand-400: oklch(0.72 0.15 270);
+  --brand-500: oklch(0.60 0.18 270);
+  --brand-600: oklch(0.52 0.20 272);
+  --brand-700: oklch(0.45 0.20 275);
+  --brand-800: oklch(0.36 0.17 278);
+  --brand-900: oklch(0.27 0.12 280);
+  --brand-950: oklch(0.18 0.08 282);
+
+  /* Accent — cyan (used for focus rings, source chips, brand gradient end) */
+  --accent-cyan-50:  oklch(0.97 0.03 200);
+  --accent-cyan-100: oklch(0.94 0.05 200);
+  --accent-cyan-200: oklch(0.90 0.08 200);
+  --accent-cyan-300: oklch(0.85 0.12 200);
+  --accent-cyan-400: oklch(0.80 0.14 200);
+  --accent-cyan-500: oklch(0.75 0.15 200);
+  --accent-cyan-600: oklch(0.62 0.14 200);
+  --accent-cyan-700: oklch(0.50 0.12 200);
+  --accent-cyan-800: oklch(0.38 0.09 200);
+  --accent-cyan-900: oklch(0.28 0.06 200);
+
+  /* Governance — Trust (emerald, "ANSWER") */
+  --trust-50:  oklch(0.97 0.03 160);
+  --trust-100: oklch(0.95 0.05 160);
+  --trust-200: oklch(0.90 0.09 160);
+  --trust-300: oklch(0.84 0.13 160);
+  --trust-400: oklch(0.77 0.16 160);
+  --trust-500: oklch(0.70 0.18 160);
+  --trust-600: oklch(0.58 0.16 160);
+  --trust-700: oklch(0.46 0.13 160);
+  --trust-800: oklch(0.36 0.10 160);
+  --trust-900: oklch(0.26 0.07 160);
+
+  /* Governance — Caution (amber, low-confidence) */
+  --caution-50:  oklch(0.98 0.03 75);
+  --caution-100: oklch(0.96 0.06 75);
+  --caution-200: oklch(0.92 0.10 75);
+  --caution-300: oklch(0.87 0.13 75);
+  --caution-400: oklch(0.82 0.14 75);
+  --caution-500: oklch(0.78 0.15 75);
+  --caution-600: oklch(0.66 0.14 65);
+  --caution-700: oklch(0.54 0.12 55);
+  --caution-800: oklch(0.42 0.09 50);
+  --caution-900: oklch(0.30 0.07 45);
+
+  /* Governance — Refuse (rose, "REFUSE") */
+  --refuse-50:  oklch(0.97 0.02 25);
+  --refuse-100: oklch(0.95 0.04 25);
+  --refuse-200: oklch(0.90 0.08 25);
+  --refuse-300: oklch(0.83 0.13 25);
+  --refuse-400: oklch(0.74 0.18 25);
+  --refuse-500: oklch(0.65 0.20 25);
+  --refuse-600: oklch(0.55 0.20 25);
+  --refuse-700: oklch(0.45 0.18 25);
+  --refuse-800: oklch(0.35 0.14 25);
+  --refuse-900: oklch(0.25 0.10 25);
+
+  /* Neutrals — warm-tinted (slight indigo bias, not pure gray) */
+  --neutral-0:   oklch(1.00 0 0);
+  --neutral-50:  oklch(0.985 0.005 270);
+  --neutral-100: oklch(0.965 0.005 270);
+  --neutral-200: oklch(0.925 0.006 270);
+  --neutral-300: oklch(0.870 0.007 270);
+  --neutral-400: oklch(0.760 0.008 270);
+  --neutral-500: oklch(0.620 0.010 270);
+  --neutral-600: oklch(0.490 0.011 270);
+  --neutral-700: oklch(0.380 0.012 270);
+  --neutral-800: oklch(0.275 0.013 270);
+  --neutral-900: oklch(0.200 0.012 270);
+  --neutral-950: oklch(0.140 0.010 270);
+
+  /* -------------------------------------------------------------------
+   * 2. SEMANTIC TOKENS — light mode
+   * ------------------------------------------------------------------- */
+
+  /* Surfaces */
+  --color-background:        var(--neutral-50);
+  --color-surface:           var(--neutral-0);
+  --color-surface-elevated:  var(--neutral-0);
+  --color-surface-sunken:    var(--neutral-100);
+  --color-surface-inverse:   var(--neutral-900);
+
+  /* Text — `muted` uses neutral-600 (not 500) so small body text still
+   * clears WCAG AA (≥4.5:1) on the light surface. */
+  --color-text-primary:    var(--neutral-900);
+  --color-text-secondary:  var(--neutral-700);
+  --color-text-muted:      var(--neutral-600);
+  --color-text-inverse:    var(--neutral-50);
+  --color-text-on-brand:   var(--neutral-0);
+
+  /* Brand */
+  --color-brand:            var(--brand-600);
+  --color-brand-hover:      var(--brand-700);
+  --color-brand-active:     var(--brand-800);
+  --color-brand-soft:       var(--brand-50);
+  --color-brand-soft-hover: var(--brand-100);
+  --color-brand-border:     var(--brand-200);
+  --color-brand-foreground: var(--neutral-0);
+
+  /* Accent (cyan) */
+  --color-accent:           var(--accent-cyan-600);
+  --color-accent-soft:      var(--accent-cyan-50);
+  --color-accent-border:    var(--accent-cyan-200);
+
+  /* Governance — Trust */
+  --color-trust:            var(--trust-600);
+  --color-trust-strong:     var(--trust-700);
+  --color-trust-soft:       var(--trust-50);
+  --color-trust-border:     var(--trust-200);
+  --color-trust-foreground: var(--neutral-0);
+
+  /* Governance — Caution */
+  --color-caution:            var(--caution-700);
+  --color-caution-strong:     var(--caution-800);
+  --color-caution-soft:       var(--caution-50);
+  --color-caution-border:     var(--caution-200);
+  --color-caution-foreground: var(--neutral-900);
+
+  /* Governance — Refuse */
+  --color-refuse:            var(--refuse-600);
+  --color-refuse-strong:     var(--refuse-700);
+  --color-refuse-soft:       var(--refuse-50);
+  --color-refuse-border:     var(--refuse-200);
+  --color-refuse-foreground: var(--neutral-0);
+
+  /* Borders */
+  --color-border-subtle:  var(--neutral-100);
+  --color-border-default: var(--neutral-200);
+  --color-border-strong:  var(--neutral-300);
+
+  /* Focus ring — accent-cyan-500 (visible on both light and dark) */
+  --color-focus-ring:        var(--accent-cyan-500);
+  --color-focus-ring-offset: var(--color-background);
+
+  /* -------------------------------------------------------------------
+   * 3. COMPONENT TOKENS — light mode
+   * ------------------------------------------------------------------- */
+
+  /* Card */
+  --card-bg:           var(--color-surface);
+  --card-border:       var(--color-border-subtle);
+  --card-shadow:       var(--elevation-1);
+  --card-shadow-hover: var(--elevation-2);
+  --card-radius:       var(--radius-lg);
+
+  /* Buttons */
+  --button-primary-bg:        var(--color-brand);
+  --button-primary-bg-hover:  var(--color-brand-hover);
+  --button-primary-bg-active: var(--color-brand-active);
+  --button-primary-fg:        var(--color-brand-foreground);
+  --button-primary-shadow:    var(--elevation-glow-brand);
+
+  --button-ghost-bg:         transparent;
+  --button-ghost-bg-hover:   var(--neutral-100);
+  --button-ghost-fg:         var(--color-text-secondary);
+  --button-ghost-fg-hover:   var(--color-text-primary);
+
+  --button-outline-bg:        transparent;
+  --button-outline-bg-hover:  var(--neutral-50);
+  --button-outline-border:    var(--color-border-default);
+  --button-outline-fg:        var(--color-text-primary);
+
+  --button-destructive-bg:        var(--color-refuse);
+  --button-destructive-bg-hover:  var(--color-refuse-strong);
+  --button-destructive-fg:        var(--color-refuse-foreground);
+
+  /* Inputs */
+  --input-bg:           var(--color-surface);
+  --input-border:       var(--color-border-default);
+  --input-border-hover: var(--color-border-strong);
+  --input-border-focus: var(--color-focus-ring);
+  --input-fg:           var(--color-text-primary);
+  --input-placeholder:  var(--color-text-muted);
+
+  /* Chips */
+  --chip-source-bg:     var(--accent-cyan-50);
+  --chip-source-fg:     var(--accent-cyan-700);
+  --chip-source-border: var(--accent-cyan-200);
+
+  --chip-rule-bg:       var(--brand-50);
+  --chip-rule-fg:       var(--brand-700);
+  --chip-rule-border:   var(--brand-200);
+
+  --chip-tag-bg:        var(--neutral-100);
+  --chip-tag-fg:        var(--neutral-700);
+  --chip-tag-border:    var(--neutral-200);
+
+  /* -------------------------------------------------------------------
+   * GRADIENTS
+   * ------------------------------------------------------------------- */
+  --gradient-brand:   linear-gradient(135deg, oklch(0.60 0.18 270) 0%, oklch(0.75 0.15 200) 100%);
+  --gradient-trust:   linear-gradient(135deg, oklch(0.70 0.18 160) 0%, oklch(0.75 0.15 200) 100%);
+  --gradient-refuse:  linear-gradient(135deg, oklch(0.65 0.20 25) 0%, oklch(0.78 0.15 75) 100%);
+  --gradient-caution: linear-gradient(135deg, oklch(0.78 0.15 75) 0%, oklch(0.74 0.18 25) 100%);
+  --gradient-mesh-bg:
+    radial-gradient(at 18% 22%, oklch(0.60 0.18 270 / 0.18) 0px, transparent 55%),
+    radial-gradient(at 82% 14%, oklch(0.75 0.15 200 / 0.16) 0px, transparent 55%),
+    radial-gradient(at 70% 88%, oklch(0.70 0.18 160 / 0.12) 0px, transparent 55%),
+    radial-gradient(at 12% 90%, oklch(0.78 0.15 75 / 0.10) 0px, transparent 55%);
+
+  /* -------------------------------------------------------------------
+   * ELEVATION
+   * ------------------------------------------------------------------- */
+  --elevation-0: none;
+  --elevation-1:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 1px 3px oklch(0 0 0 / 0.06);
+  --elevation-2:
+    0 4px 8px -2px oklch(0 0 0 / 0.06),
+    0 2px 4px -2px oklch(0 0 0 / 0.04);
+  --elevation-3:
+    0 12px 24px -6px oklch(0 0 0 / 0.08),
+    0 4px 8px -4px oklch(0 0 0 / 0.04);
+  --elevation-4:
+    0 24px 48px -12px oklch(0 0 0 / 0.18),
+    0 8px 16px -8px oklch(0 0 0 / 0.06);
+  --elevation-glow-brand:  0 0 24px -4px oklch(0.60 0.18 270 / 0.40);
+  --elevation-glow-trust:  0 0 24px -4px oklch(0.70 0.18 160 / 0.35);
+  --elevation-glow-refuse: 0 0 24px -4px oklch(0.65 0.20 25 / 0.35);
+
+  /* -------------------------------------------------------------------
+   * TYPOGRAPHY
+   * ------------------------------------------------------------------- */
+  --font-size:        16px;
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  --text-xs-size: 0.75rem;     --text-xs-line: 1rem;
+  --text-sm-size: 0.875rem;    --text-sm-line: 1.25rem;
+  --text-base-size: 1rem;      --text-base-line: 1.5rem;
+  --text-lg-size: 1.125rem;    --text-lg-line: 1.75rem;
+  --text-xl-size: 1.25rem;     --text-xl-line: 1.875rem;
+  --text-2xl-size: 1.5rem;     --text-2xl-line: 2rem;
+  --text-3xl-size: 1.875rem;   --text-3xl-line: 2.25rem;
+  --text-4xl-size: 2.25rem;    --text-4xl-line: 2.5rem;
+  --text-display-size: 2.5rem; --text-display-line: 2.75rem;
+
+  --tracking-tight:    -0.02em;
+  --tracking-tighter:  -0.04em;
+  --tracking-normal:   0em;
+  --tracking-wide:     0.02em;
+  --tracking-uppercase: 0.16em;
+
+  /* -------------------------------------------------------------------
+   * MOTION
+   * ------------------------------------------------------------------- */
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-instant: 60ms;
+  --duration-fast:    120ms;
+  --duration-base:    200ms;
+  --duration-slow:    320ms;
+  --duration-slower:  520ms;
+
+  /* -------------------------------------------------------------------
+   * RADII
+   * ------------------------------------------------------------------- */
+  --radius:    0.625rem;
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* -------------------------------------------------------------------
+   * BACKWARDS-COMPAT ALIASES — keep legacy screens rendering
+   * Map the original shadcn token names onto the new ramps.
+   * Other branches MUST migrate to the new semantic tokens, but until
+   * they do, these aliases prevent any visual regressions.
+   * ------------------------------------------------------------------- */
+  --background:           var(--color-background);
+  --foreground:           var(--color-text-primary);
+  --card:                 var(--card-bg);
+  --card-foreground:      var(--color-text-primary);
+  --popover:              var(--color-surface-elevated);
+  --popover-foreground:   var(--color-text-primary);
+  --primary:              var(--color-brand);
+  --primary-foreground:   var(--color-brand-foreground);
+  --secondary:            var(--neutral-100);
+  --secondary-foreground: var(--color-text-primary);
+  --muted:                var(--neutral-100);
+  --muted-foreground:     var(--color-text-muted);
+  --accent:               var(--neutral-100);
+  --accent-foreground:    var(--color-text-primary);
+  --destructive:          var(--color-refuse);
+  --destructive-foreground: var(--color-refuse-foreground);
+  --border:               var(--color-border-default);
+  --input:                transparent;
+  --input-background:     var(--neutral-100);
+  --switch-background:    var(--neutral-300);
+  --ring:                 var(--color-focus-ring);
+
+  --chart-1: var(--brand-500);
+  --chart-2: var(--accent-cyan-500);
+  --chart-3: var(--trust-500);
+  --chart-4: var(--caution-500);
+  --chart-5: var(--refuse-500);
+
+  --sidebar:                       var(--color-surface);
+  --sidebar-foreground:            var(--color-text-primary);
+  --sidebar-primary:               var(--color-brand);
+  --sidebar-primary-foreground:    var(--color-brand-foreground);
+  --sidebar-accent:                var(--neutral-100);
+  --sidebar-accent-foreground:     var(--color-text-primary);
+  --sidebar-border:                var(--color-border-subtle);
+  --sidebar-ring:                  var(--color-focus-ring);
 }
 
+/* =====================================================================
+ * DARK MODE
+ * Slight indigo tint, NOT pure black. Brand shifts toward cyan for
+ * better contrast against the dark indigo background.
+ * ===================================================================== */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  /* Surfaces — indigo-tinted dark */
+  --color-background:       oklch(0.16 0.012 270);
+  --color-surface:          oklch(0.20 0.014 270);
+  --color-surface-elevated: oklch(0.24 0.015 270);
+  --color-surface-sunken:   oklch(0.13 0.010 270);
+  --color-surface-inverse:  var(--neutral-50);
+
+  /* Text */
+  --color-text-primary:   oklch(0.97 0.005 270);
+  --color-text-secondary: oklch(0.82 0.010 270);
+  --color-text-muted:     oklch(0.65 0.012 270);
+  --color-text-inverse:   var(--neutral-900);
+  --color-text-on-brand:  oklch(0.16 0.012 270);
+
+  /* Brand — cyan end of gradient for visibility on dark indigo */
+  --color-brand:            var(--accent-cyan-500);
+  --color-brand-hover:      var(--accent-cyan-400);
+  --color-brand-active:     var(--accent-cyan-300);
+  --color-brand-soft:       oklch(0.28 0.06 200);
+  --color-brand-soft-hover: oklch(0.34 0.08 200);
+  --color-brand-border:     oklch(0.40 0.10 200);
+  --color-brand-foreground: oklch(0.16 0.012 270);
+
+  --color-accent:        var(--accent-cyan-400);
+  --color-accent-soft:   oklch(0.28 0.06 200);
+  --color-accent-border: oklch(0.40 0.10 200);
+
+  /* Trust */
+  --color-trust:            var(--trust-400);
+  --color-trust-strong:     var(--trust-300);
+  --color-trust-soft:       oklch(0.26 0.06 160);
+  --color-trust-border:     oklch(0.38 0.10 160);
+  --color-trust-foreground: oklch(0.16 0.012 270);
+
+  /* Caution */
+  --color-caution:            var(--caution-400);
+  --color-caution-strong:     var(--caution-300);
+  --color-caution-soft:       oklch(0.30 0.07 75);
+  --color-caution-border:     oklch(0.42 0.10 75);
+  --color-caution-foreground: oklch(0.16 0.012 270);
+
+  /* Refuse */
+  --color-refuse:            var(--refuse-400);
+  --color-refuse-strong:     var(--refuse-300);
+  --color-refuse-soft:       oklch(0.28 0.07 25);
+  --color-refuse-border:     oklch(0.42 0.12 25);
+  --color-refuse-foreground: oklch(0.16 0.012 270);
+
+  /* Borders */
+  --color-border-subtle:  oklch(0.26 0.014 270);
+  --color-border-default: oklch(0.32 0.015 270);
+  --color-border-strong:  oklch(0.42 0.018 270);
+
+  --color-focus-ring:        var(--accent-cyan-400);
+  --color-focus-ring-offset: var(--color-background);
+
+  /* Component */
+  --card-bg:     var(--color-surface);
+  --card-border: var(--color-border-subtle);
+  --card-shadow:
+    0 1px 2px oklch(0 0 0 / 0.40),
+    0 1px 3px oklch(0 0 0 / 0.30);
+  --card-shadow-hover:
+    0 4px 8px -2px oklch(0 0 0 / 0.45),
+    0 2px 4px -2px oklch(0 0 0 / 0.30);
+
+  --button-ghost-bg-hover: oklch(0.26 0.014 270);
+  --button-outline-bg-hover: oklch(0.24 0.014 270);
+  --button-outline-border: var(--color-border-default);
+
+  --input-bg:           oklch(0.20 0.014 270);
+  --input-border:       var(--color-border-default);
+  --input-border-hover: var(--color-border-strong);
+
+  --chip-source-bg:     oklch(0.28 0.06 200);
+  --chip-source-fg:     var(--accent-cyan-200);
+  --chip-source-border: oklch(0.40 0.10 200);
+
+  --chip-rule-bg:       oklch(0.27 0.10 270);
+  --chip-rule-fg:       var(--brand-200);
+  --chip-rule-border:   oklch(0.42 0.14 270);
+
+  --chip-tag-bg:        oklch(0.26 0.014 270);
+  --chip-tag-fg:        var(--color-text-secondary);
+  --chip-tag-border:    var(--color-border-default);
+
+  /* Elevation in dark mode uses deeper shadows + colored glow */
+  --elevation-1:
+    0 1px 2px oklch(0 0 0 / 0.35),
+    0 1px 3px oklch(0 0 0 / 0.30);
+  --elevation-2:
+    0 4px 8px -2px oklch(0 0 0 / 0.40),
+    0 2px 4px -2px oklch(0 0 0 / 0.30);
+  --elevation-3:
+    0 12px 24px -6px oklch(0 0 0 / 0.50),
+    0 4px 8px -4px oklch(0 0 0 / 0.30);
+  --elevation-4:
+    0 24px 48px -12px oklch(0 0 0 / 0.60),
+    0 8px 16px -8px oklch(0 0 0 / 0.40);
+  --elevation-glow-brand:  0 0 28px -4px oklch(0.75 0.15 200 / 0.50);
+  --elevation-glow-trust:  0 0 28px -4px oklch(0.77 0.16 160 / 0.45);
+  --elevation-glow-refuse: 0 0 28px -4px oklch(0.74 0.18 25 / 0.45);
+
+  --gradient-mesh-bg:
+    radial-gradient(at 18% 22%, oklch(0.60 0.18 270 / 0.30) 0px, transparent 55%),
+    radial-gradient(at 82% 14%, oklch(0.75 0.15 200 / 0.22) 0px, transparent 55%),
+    radial-gradient(at 70% 88%, oklch(0.70 0.18 160 / 0.18) 0px, transparent 55%),
+    radial-gradient(at 12% 90%, oklch(0.78 0.15 75 / 0.14) 0px, transparent 55%);
+
+  /* Legacy aliases follow the dark semantic values automatically since
+   * they reference --color-* — but a few need explicit overrides. */
+  --background:           var(--color-background);
+  --foreground:           var(--color-text-primary);
+  --card:                 var(--card-bg);
+  --card-foreground:      var(--color-text-primary);
+  --popover:              var(--color-surface-elevated);
+  --popover-foreground:   var(--color-text-primary);
+  --primary:              var(--color-brand);
+  --primary-foreground:   var(--color-brand-foreground);
+  --secondary:            oklch(0.26 0.014 270);
+  --secondary-foreground: var(--color-text-primary);
+  --muted:                oklch(0.24 0.014 270);
+  --muted-foreground:     var(--color-text-muted);
+  --accent:               oklch(0.26 0.014 270);
+  --accent-foreground:    var(--color-text-primary);
+  --destructive:          var(--color-refuse);
+  --destructive-foreground: var(--color-refuse-foreground);
+  --border:               var(--color-border-default);
+  --input:                oklch(0.26 0.014 270);
+  --input-background:     oklch(0.20 0.014 270);
+  --switch-background:    oklch(0.32 0.015 270);
+  --ring:                 var(--color-focus-ring);
+
+  --chart-1: var(--brand-400);
+  --chart-2: var(--accent-cyan-400);
+  --chart-3: var(--trust-400);
+  --chart-4: var(--caution-400);
+  --chart-5: var(--refuse-400);
+
+  --sidebar:                       var(--color-surface);
+  --sidebar-foreground:            var(--color-text-primary);
+  --sidebar-primary:               var(--color-brand);
+  --sidebar-primary-foreground:    var(--color-brand-foreground);
+  --sidebar-accent:                oklch(0.26 0.014 270);
+  --sidebar-accent-foreground:     var(--color-text-primary);
+  --sidebar-border:                var(--color-border-subtle);
+  --sidebar-ring:                  var(--color-focus-ring);
 }
 
+/* =====================================================================
+ * @theme inline — wire tokens into Tailwind v4 utilities
+ * Generates utilities like:
+ *   bg-background, bg-surface, bg-brand, bg-brand-soft, bg-trust, ...
+ *   text-primary, text-secondary, text-muted, text-trust, text-refuse, ...
+ *   border-subtle, border-default, border-strong, border-brand, ...
+ *   shadow-elevation-{1..4}, shadow-glow-brand, ...
+ *   ring-focus, rounded-lg, etc.
+ * ===================================================================== */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-input-background: var(--input-background);
-  --color-switch-background: var(--switch-background);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
+  /* === Color palette (raw ramps exposed for power use) === */
+  --color-brand-50:  var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+  --color-brand-950: var(--brand-950);
+
+  --color-accent-cyan-50:  var(--accent-cyan-50);
+  --color-accent-cyan-100: var(--accent-cyan-100);
+  --color-accent-cyan-200: var(--accent-cyan-200);
+  --color-accent-cyan-300: var(--accent-cyan-300);
+  --color-accent-cyan-400: var(--accent-cyan-400);
+  --color-accent-cyan-500: var(--accent-cyan-500);
+  --color-accent-cyan-600: var(--accent-cyan-600);
+  --color-accent-cyan-700: var(--accent-cyan-700);
+  --color-accent-cyan-800: var(--accent-cyan-800);
+  --color-accent-cyan-900: var(--accent-cyan-900);
+
+  --color-trust-50:  var(--trust-50);
+  --color-trust-100: var(--trust-100);
+  --color-trust-200: var(--trust-200);
+  --color-trust-300: var(--trust-300);
+  --color-trust-400: var(--trust-400);
+  --color-trust-500: var(--trust-500);
+  --color-trust-600: var(--trust-600);
+  --color-trust-700: var(--trust-700);
+  --color-trust-800: var(--trust-800);
+  --color-trust-900: var(--trust-900);
+
+  --color-caution-50:  var(--caution-50);
+  --color-caution-100: var(--caution-100);
+  --color-caution-200: var(--caution-200);
+  --color-caution-300: var(--caution-300);
+  --color-caution-400: var(--caution-400);
+  --color-caution-500: var(--caution-500);
+  --color-caution-600: var(--caution-600);
+  --color-caution-700: var(--caution-700);
+  --color-caution-800: var(--caution-800);
+  --color-caution-900: var(--caution-900);
+
+  --color-refuse-50:  var(--refuse-50);
+  --color-refuse-100: var(--refuse-100);
+  --color-refuse-200: var(--refuse-200);
+  --color-refuse-300: var(--refuse-300);
+  --color-refuse-400: var(--refuse-400);
+  --color-refuse-500: var(--refuse-500);
+  --color-refuse-600: var(--refuse-600);
+  --color-refuse-700: var(--refuse-700);
+  --color-refuse-800: var(--refuse-800);
+  --color-refuse-900: var(--refuse-900);
+
+  /* === Semantic surfaces & text === */
+  --color-background:       var(--color-background);
+  --color-surface:          var(--color-surface);
+  --color-surface-elevated: var(--color-surface-elevated);
+  --color-surface-sunken:   var(--color-surface-sunken);
+  --color-surface-inverse:  var(--color-surface-inverse);
+  --color-foreground:       var(--color-text-primary);
+
+  --color-text-primary:    var(--color-text-primary);
+  --color-text-secondary:  var(--color-text-secondary);
+  --color-text-muted:      var(--color-text-muted);
+  --color-text-inverse:    var(--color-text-inverse);
+  --color-text-on-brand:   var(--color-text-on-brand);
+
+  /* === Semantic accents === */
+  --color-brand:             var(--color-brand);
+  --color-brand-hover:       var(--color-brand-hover);
+  --color-brand-active:      var(--color-brand-active);
+  --color-brand-soft:        var(--color-brand-soft);
+  --color-brand-soft-hover:  var(--color-brand-soft-hover);
+  --color-brand-border:      var(--color-brand-border);
+  --color-brand-foreground:  var(--color-brand-foreground);
+
+  --color-accent:        var(--color-accent);
+  --color-accent-soft:   var(--color-accent-soft);
+  --color-accent-border: var(--color-accent-border);
+
+  --color-trust:            var(--color-trust);
+  --color-trust-strong:     var(--color-trust-strong);
+  --color-trust-soft:       var(--color-trust-soft);
+  --color-trust-border:     var(--color-trust-border);
+  --color-trust-foreground: var(--color-trust-foreground);
+
+  --color-caution:            var(--color-caution);
+  --color-caution-strong:     var(--color-caution-strong);
+  --color-caution-soft:       var(--color-caution-soft);
+  --color-caution-border:     var(--color-caution-border);
+  --color-caution-foreground: var(--color-caution-foreground);
+
+  --color-refuse:            var(--color-refuse);
+  --color-refuse-strong:     var(--color-refuse-strong);
+  --color-refuse-soft:       var(--color-refuse-soft);
+  --color-refuse-border:     var(--color-refuse-border);
+  --color-refuse-foreground: var(--color-refuse-foreground);
+
+  /* Borders & focus */
+  --color-border:         var(--color-border-default);
+  --color-border-subtle:  var(--color-border-subtle);
+  --color-border-default: var(--color-border-default);
+  --color-border-strong:  var(--color-border-strong);
+  --color-focus-ring:     var(--color-focus-ring);
+
+  /* === Legacy shadcn aliases (so existing utilities still resolve) === */
+  --color-card:                     var(--card);
+  --color-card-foreground:          var(--card-foreground);
+  --color-popover:                  var(--popover);
+  --color-popover-foreground:       var(--popover-foreground);
+  --color-primary:                  var(--primary);
+  --color-primary-foreground:       var(--primary-foreground);
+  --color-secondary:                var(--secondary);
+  --color-secondary-foreground:     var(--secondary-foreground);
+  --color-muted:                    var(--muted);
+  --color-muted-foreground:         var(--muted-foreground);
+  --color-accent-foreground:        var(--accent-foreground);
+  --color-destructive:              var(--destructive);
+  --color-destructive-foreground:   var(--destructive-foreground);
+  --color-input:                    var(--input);
+  --color-input-background:         var(--input-background);
+  --color-switch-background:        var(--switch-background);
+  --color-ring:                     var(--ring);
+  --color-chart-1:                  var(--chart-1);
+  --color-chart-2:                  var(--chart-2);
+  --color-chart-3:                  var(--chart-3);
+  --color-chart-4:                  var(--chart-4);
+  --color-chart-5:                  var(--chart-5);
+  --color-sidebar:                  var(--sidebar);
+  --color-sidebar-foreground:       var(--sidebar-foreground);
+  --color-sidebar-primary:          var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent:           var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-sidebar-border:           var(--sidebar-border);
+  --color-sidebar-ring:             var(--sidebar-ring);
+
+  /* === Radii === */
+  --radius-xs:  var(--radius-xs);
+  --radius-sm:  var(--radius-sm);
+  --radius-md:  var(--radius-md);
+  --radius-lg:  var(--radius-lg);
+  --radius-xl:  var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-3xl: var(--radius-3xl);
+  --radius-full: var(--radius-full);
+
+  /* === Shadows / elevation === */
+  --shadow-elevation-1: var(--elevation-1);
+  --shadow-elevation-2: var(--elevation-2);
+  --shadow-elevation-3: var(--elevation-3);
+  --shadow-elevation-4: var(--elevation-4);
+  --shadow-glow-brand:  var(--elevation-glow-brand);
+  --shadow-glow-trust:  var(--elevation-glow-trust);
+  --shadow-glow-refuse: var(--elevation-glow-refuse);
+
+  /* === Gradients (consumed via bg-[var(--gradient-brand)] etc.) === */
+  --gradient-brand:   var(--gradient-brand);
+  --gradient-trust:   var(--gradient-trust);
+  --gradient-refuse:  var(--gradient-refuse);
+  --gradient-caution: var(--gradient-caution);
+  --gradient-mesh-bg: var(--gradient-mesh-bg);
+
+  /* === Typography === */
+  --font-sans:    var(--font-geist-sans);
+  --font-mono:    var(--font-geist-mono);
+  --font-serif:   ui-serif, Georgia, serif;
+
+  --text-xs: var(--text-xs-size);
+  --text-xs--line-height: var(--text-xs-line);
+  --text-sm: var(--text-sm-size);
+  --text-sm--line-height: var(--text-sm-line);
+  --text-base: var(--text-base-size);
+  --text-base--line-height: var(--text-base-line);
+  --text-lg: var(--text-lg-size);
+  --text-lg--line-height: var(--text-lg-line);
+  --text-xl: var(--text-xl-size);
+  --text-xl--line-height: var(--text-xl-line);
+  --text-2xl: var(--text-2xl-size);
+  --text-2xl--line-height: var(--text-2xl-line);
+  --text-3xl: var(--text-3xl-size);
+  --text-3xl--line-height: var(--text-3xl-line);
+  --text-4xl: var(--text-4xl-size);
+  --text-4xl--line-height: var(--text-4xl-line);
+  --text-display: var(--text-display-size);
+  --text-display--line-height: var(--text-display-line);
+
+  --tracking-tight:    var(--tracking-tight);
+  --tracking-tighter:  var(--tracking-tighter);
+  --tracking-wide:     var(--tracking-wide);
+  --tracking-uppercase: var(--tracking-uppercase);
+
+  /* === Motion === */
+  --ease-out:    var(--ease-out);
+  --ease-spring: var(--ease-spring);
+  --ease-in-out: var(--ease-in-out);
+  --animate-shimmer:      shimmer 1.6s linear infinite;
+  --animate-pulse-trust:  pulse-trust 2.4s var(--ease-in-out) infinite;
+  --animate-rule-cascade: rule-cascade var(--duration-slow) var(--ease-out) both;
+  --animate-mesh-drift:   mesh-drift 28s var(--ease-in-out) infinite;
 }
 
+/* =====================================================================
+ * BASE LAYER — global element styling
+ * ===================================================================== */
 html {
   font-size: var(--font-size);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: oklch(0.60 0.18 270 / 0.25);
+  color: var(--color-text-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =====================================================================
+ * UTILITY CLASSES — bridge tokens into class names that render well
+ * with `bg-*` / `text-*` Tailwind utilities for arbitrary props.
+ * ===================================================================== */
+.bg-gradient-brand   { background-image: var(--gradient-brand); }
+.bg-gradient-trust   { background-image: var(--gradient-trust); }
+.bg-gradient-refuse  { background-image: var(--gradient-refuse); }
+.bg-gradient-caution { background-image: var(--gradient-caution); }
+.bg-gradient-mesh    { background-image: var(--gradient-mesh-bg); }
+
+.text-gradient-brand {
+  background-image: var(--gradient-brand);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }

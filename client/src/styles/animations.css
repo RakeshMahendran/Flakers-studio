@@ -1,0 +1,99 @@
+/* =====================================================================
+ * FlakersStudio Animation Library
+ * Imported by client/app/globals.css. Keyframes only — no selectors that
+ * reference tokens directly so this file stays portable.
+ * ===================================================================== */
+
+/* Skeleton shimmer — sweeps a soft highlight across the surface */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Subtle emerald glow — confirmed answers / trust state */
+@keyframes pulse-trust {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 oklch(0.70 0.18 160 / 0.0),
+      0 0 12px -2px oklch(0.70 0.18 160 / 0.18);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px oklch(0.70 0.18 160 / 0.14),
+      0 0 22px -2px oklch(0.70 0.18 160 / 0.45);
+  }
+}
+
+/* Governance rules cascade in sequentially — pair with stagger delays */
+@keyframes rule-cascade {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+    filter: blur(2px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* Slow mesh drift — hero / empty-state ambient motion */
+@keyframes mesh-drift {
+  0%, 100% {
+    background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%;
+    transform: scale(1);
+  }
+  25% {
+    background-position: 10% 5%, 90% 10%, 95% 90%, 5% 95%;
+  }
+  50% {
+    background-position: 5% 15%, 95% 0%, 85% 95%, 15% 85%;
+    transform: scale(1.02);
+  }
+  75% {
+    background-position: 0% 10%, 100% 5%, 90% 100%, 10% 90%;
+  }
+}
+
+/* Used internally by Skeleton primitive */
+.animate-shimmer-bg {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(0.60 0.18 270 / 0.10) 25%,
+    oklch(0.75 0.15 200 / 0.18) 50%,
+    oklch(0.60 0.18 270 / 0.10) 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+.animate-pulse-trust {
+  animation: pulse-trust 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.animate-rule-cascade {
+  animation: rule-cascade 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-mesh-drift {
+  animation: mesh-drift 28s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+/* Stagger helpers — apply alongside .animate-rule-cascade */
+.stagger-1 { animation-delay: 60ms; }
+.stagger-2 { animation-delay: 120ms; }
+.stagger-3 { animation-delay: 180ms; }
+.stagger-4 { animation-delay: 240ms; }
+.stagger-5 { animation-delay: 300ms; }
+.stagger-6 { animation-delay: 360ms; }
