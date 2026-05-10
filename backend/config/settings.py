@@ -67,6 +67,16 @@ class Settings(BaseSettings):
     MAX_CONTENT_LENGTH: int = 10000  # characters per chunk
     CHUNK_OVERLAP: int = 200
     MAX_CRAWL_PAGES: int = 1000
+
+    # Hybrid / semantic chunking knobs.
+    # Set USE_SEMANTIC_CHUNKING=False to revert to the legacy
+    # fixed-token chunker for the entire ingestion pipeline.
+    USE_SEMANTIC_CHUNKING: bool = True
+    SEMANTIC_CHUNK_TARGET_MIN: int = 300
+    SEMANTIC_CHUNK_TARGET_MAX: int = 600
+    SEMANTIC_CHUNK_OVERLAP: int = 100
+    SEMANTIC_CHUNK_SIMILARITY_THRESHOLD: float = 0.5
+    SEMANTIC_CHUNK_MAX_SENTENCES_PER_PAGE: int = 200
     
     # Governance Rules
     ENABLE_STRICT_GOVERNANCE: bool = True
