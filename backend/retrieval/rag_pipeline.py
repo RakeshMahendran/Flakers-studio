@@ -20,6 +20,7 @@ from backend.models.project import Project
 from backend.services.azure_ai import AzureAIService
 from backend.services.embeddings import EmbeddingService
 from backend.retrieval.retrieval_service import RetrievalService
+from backend.retrieval.fast_intent import FastIntentResult, detect_fast_intent
 from backend.retrieval.prompt_builder import (
     detect_response_mode,
     get_synthesis_system_prompt,
@@ -52,6 +53,26 @@ class RAGPipeline:
         with log_context(tenant_id=str(assistant.tenant_id), assistant_id=str(assistant.id)):
             start_time = time.time()
             session = await self.get_or_create_session(db, assistant.id, session_id)
+
+            # Fast-path: trivial conversational turns (greetings, thanks,
+            # goodbyes, and context-gated yes/no). Runs BEFORE embeddings,
+            # retrieval, or the synthesis LLM call so it costs ~1ms and
+            # zero Azure tokens. See backend/retrieval/fast_intent.py.
+            last_bot_message = await self._fetch_last_bot_message(db, session.id)
+            fast_hit = detect_fast_intent(
+                user_message,
+                assistant_name=assistant.name,
+                last_bot_message=last_bot_message,
+            )
+            if fast_hit is not None:
+                return await self._respond_fast_intent(
+                    db=db,
+                    session=session,
+                    user_message=user_message,
+                    fast_hit=fast_hit,
+                    start_time=start_time,
+                )
+
             query_embedding = await self.embedding_service.embed_text(user_message)
 
             project_name = assistant.name
@@ -199,6 +220,65 @@ Guidelines:
             }
 
     @staticmethod
+    async def _fetch_last_bot_message(db: AsyncSession, session_id: Any) -> Optional[str]:
+        """Return the most recent assistant turn for this session, if any.
+
+        Used to gate fast-path affirmation/negation matches: a bare
+        "yes" or "no" is only meaningful when the previous bot message
+        was a question.
+        """
+        try:
+            result = await db.execute(
+                select(ChatMessage)
+                .where(ChatMessage.session_id == session_id)
+                .order_by(ChatMessage.created_at.desc())
+                .limit(1)
+            )
+            last = result.scalar_one_or_none()
+        except Exception:
+            return None
+        if last is None:
+            return None
+        return last.assistant_response
+
+    async def _respond_fast_intent(
+        self,
+        *,
+        db: AsyncSession,
+        session: ChatSession,
+        user_message: str,
+        fast_hit: FastIntentResult,
+        start_time: float,
+    ) -> Dict[str, Any]:
+        """Log and return a fast-path response shaped like a normal answer."""
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        await self.log_chat_message(
+            db=db,
+            session_id=session.id,
+            user_message=user_message,
+            assistant_response=fast_hit.canned_response,
+            decision=ChatDecision.ANSWER,
+            retrieved_chunks=[],
+            sources_used=[],
+            rules_applied=["fast_intent"],
+            azure_usage={},
+            processing_time_ms=processing_time_ms,
+        )
+        logger.info(
+            "Fast-intent short-circuit: intent=%s session=%s",
+            fast_hit.intent,
+            session.id,
+        )
+        return {
+            "decision": "ANSWER",
+            "answer": fast_hit.canned_response,
+            "sources": [],
+            "rules_applied": ["fast_intent"],
+            "session_id": str(session.id),
+            "processing_time_ms": processing_time_ms,
+        }
+
+    @staticmethod
     async def get_or_create_session(db: AsyncSession, assistant_id: str, session_id: Optional[str]) -> ChatSession:
         if session_id:
             result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
@@ -246,6 +326,15 @@ Guidelines:
 
     @staticmethod
     def is_small_talk(user_message: str) -> bool:
+        # NOTE: This method is DEPRECATED in favor of detect_fast_intent()
+        # in backend.retrieval.fast_intent. It remains here as a fallback
+        # only for the case where no context is found (line 101), which
+        # happens AFTER the fast-path check has already run.
+        #
+        # TODO: Consider removing this method entirely and handling the
+        # no-context case differently, since detect_fast_intent() already
+        # catches greetings/thanks/goodbye. This duplication creates
+        # maintenance burden and potential inconsistency.
         if not user_message:
             return False
         text = user_message.strip().lower()
