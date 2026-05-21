@@ -26,7 +26,7 @@ class _StubEmbedding:
         self._embedding = embedding or [0.1] * 3072
         self._error = error
 
-    async def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str, tenant_id: Optional[str] = None) -> List[float]:
         if self._error:
             raise self._error
         return self._embedding
