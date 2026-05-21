@@ -89,13 +89,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) {
     const Comp = asChild ? Slot : "button";
-    return (
-      <Comp
-        ref={ref}
-        className={cn(buttonVariants({ variant, size }), className)}
-        disabled={disabled || isLoading}
-        {...props}
-      >
+    // Radix Slot requires exactly ONE React element child. When asChild is
+    // set, we pass children straight through and skip the loading spinner
+    // (consumers using asChild typically wrap a <Link>, which has its own
+    // visual treatment).
+    const content = asChild ? (
+      children
+    ) : (
+      <>
         {isLoading ? (
           <span
             className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
@@ -103,6 +104,16 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           />
         ) : null}
         {children}
+      </>
+    );
+    return (
+      <Comp
+        ref={ref}
+        className={cn(buttonVariants({ variant, size }), className)}
+        disabled={disabled || isLoading}
+        {...props}
+      >
+        {content}
       </Comp>
     );
   }

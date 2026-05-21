@@ -22,7 +22,6 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Bell,
   Bot,
   ChevronLeft,
   ChevronRight,
@@ -47,6 +46,7 @@ import {
   useCommandPalette,
   type PaletteAssistant,
 } from "./command-palette";
+import { NotificationsBell } from "./notifications-bell";
 
 /* ------------------------------------------------------------------ */
 /* Sidebar config                                                      */
@@ -478,25 +478,7 @@ function TopBar({
 
       {/* Right cluster */}
       <div className="ml-2 flex items-center gap-1">
-        <button
-          type="button"
-          aria-label="Notifications. You have new notifications."
-          className={cn(
-            "relative inline-flex h-9 w-9 min-h-[44px] min-w-[44px] items-center justify-center rounded-md",
-            "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text-primary)]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-          )}
-        >
-          <Bell className="h-4 w-4" />
-          <span
-            className={cn(
-              "absolute right-2 top-2 h-1.5 w-1.5 rounded-full",
-              "bg-[var(--color-trust)]"
-            )}
-            aria-hidden
-            role="status"
-          />
-        </button>
+        <NotificationsBell />
         <button
           type="button"
           onClick={onToggleTheme}

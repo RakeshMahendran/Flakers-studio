@@ -19,10 +19,11 @@ import { useAuth } from "@/contexts/auth-context";
 import { apiGet, apiDelete } from "@/lib/api-client";
 import { useAppShell } from "@/components/layout/app-shell";
 
-import { DashboardHero, type HeroStat } from "@/components/dashboard/hero";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { AssistantGrid } from "@/components/dashboard/assistant-grid";
 import { KpiTiles, type KpiTileData } from "@/components/dashboard/kpi-tiles";
+import { GreetingStrip } from "@/components/dashboard/greeting-strip";
+import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
 
 /* =============================================================== */
 /* Types — preserved from the legacy file (other screens import them) */
@@ -263,9 +264,12 @@ export function DashboardScreen() {
   const fetchingRef = useRef(false);
 
   /* -------------------------------------------------------------
-   * Fetch assistants on mount + poll while any are still ingesting.
+   * Fetch assistants once `user` is hydrated, then poll while any
+   * are still ingesting. Re-running when `user` changes prevents the
+   * loader from getting stuck during initial auth-context hydration.
    * ------------------------------------------------------------- */
   useEffect(() => {
+    if (!user) return;
     fetchAssistants();
 
     const interval = setInterval(() => {
@@ -279,10 +283,15 @@ export function DashboardScreen() {
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   const fetchAssistants = async () => {
-    if (fetchingRef.current || !user) return;
+    if (fetchingRef.current) return;
+    if (!user) {
+      // Surface to UI rather than spinning forever when there's no auth yet.
+      setLoading(false);
+      return;
+    }
     fetchingRef.current = true;
     try {
       const response = await apiGet("/api/assistants", user.accessToken);
@@ -336,37 +345,12 @@ export function DashboardScreen() {
     return seg.charAt(0).toUpperCase() + seg.slice(1);
   }, [user]);
 
-  const heroStats: HeroStat[] = useMemo(() => {
-    const ready = assistants.filter((a) => a.status === "ready").length;
-    const total = assistants.length;
-    const totalPages = assistants.reduce(
-      (sum, a) => sum + Number.parseInt(a.totalPagesCrawled || "0", 10),
-      0
-    );
-    const conversations = ready * 412 + 11; // pleasant pseudo-stat
-    const answerRate = ready > 0 ? 94 : 0;
-
-    return [
-      {
-        label: ready === 1 ? "active assistant" : "active assistants",
-        value: total > 0 ? `${ready}/${total}` : "0",
-      },
-      {
-        label: "conversations this month",
-        value: conversations.toLocaleString(),
-      },
-      {
-        label: "answer rate",
-        value: `${answerRate}%`,
-      },
-      {
-        label: "pages indexed",
-        value: totalPages.toLocaleString(),
-      },
-    ];
-  }, [assistants]);
-
   const kpiData = useMemo(() => buildKpiData(assistants), [assistants]);
+
+  // Show KPIs only when there's real data — never fake "94%" numbers for a
+  // trust-first product. New users see the onboarding checklist instead.
+  const hasRealData = assistants.length > 0 && assistants !== SEED_ASSISTANTS;
+  const hasReady = assistants.some((a) => a.status === "ready");
 
   /* -------------------------------------------------------------
    * Handlers
@@ -396,8 +380,7 @@ export function DashboardScreen() {
   };
 
   const handleSettings = (id: string) => {
-    // Settings modal pending — for now jump to the assistant detail.
-    router.push(`/assistant/${id}`);
+    router.push(`/assistant/${id}/manage`);
   };
 
   if (loading) {
@@ -405,19 +388,27 @@ export function DashboardScreen() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <DashboardHero
+    <div className="flex flex-col gap-6">
+      <GreetingStrip
         firstName={firstName}
-        stats={heroStats}
+        tenantName={user?.tenantName}
         onCreate={handleCreate}
       />
 
-      <QuickActions
-        onAddSite={handleCreate}
-        onUploadDocs={handleCreate}
-        onEditGovernance={() => shell.openCommandPalette()}
-        onViewAnalytics={() => shell.openCommandPalette()}
-      />
+      {/* Empty-state onboarding takes priority over the action strip */}
+      {!hasRealData ? (
+        <OnboardingChecklist
+          hasAssistant={assistants.length > 0}
+          hasReadyAssistant={hasReady}
+        />
+      ) : (
+        <QuickActions
+          onAddSite={() => router.push("/assistant/create?source=wordpress")}
+          onUploadDocs={() => router.push("/assistant/create?source=upload")}
+          onEditGovernance={() => router.push("/content")}
+          onViewAnalytics={() => router.push("/analytics")}
+        />
+      )}
 
       <AssistantGrid
         assistants={assistants}
@@ -427,7 +418,8 @@ export function DashboardScreen() {
         onCreate={handleCreate}
       />
 
-      <KpiTiles data={kpiData} />
+      {/* Only show KPIs when there's real, non-seeded data behind them. */}
+      {hasRealData ? <KpiTiles data={kpiData} /> : null}
     </div>
   );
 }

@@ -7,7 +7,7 @@
  * analytics). On hover, a gradient ring fades in.
  */
 import * as React from "react";
-import { ChartArea, FileStack, Globe, Shield } from "lucide-react";
+import { ChartArea, FileStack, FolderOpen, Globe } from "lucide-react";
 import { cn } from "@/lib/design-system";
 
 export interface QuickAction {
@@ -47,10 +47,10 @@ export function QuickActions({
       onSelect: onUploadDocs,
     },
     {
-      id: "governance",
-      label: "Edit governance rules",
-      description: "Tenant isolation, attribution",
-      icon: Shield,
+      id: "content",
+      label: "Browse content",
+      description: "Projects, scraped URLs, jobs",
+      icon: FolderOpen,
       onSelect: onEditGovernance,
     },
     {

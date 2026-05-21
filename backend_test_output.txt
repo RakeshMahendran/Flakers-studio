@@ -1,0 +1,28 @@
+
+>>> Starting FlakersStudio Backend Tests...
+
+[PASS] Health Check: (2123ms)
+[FAIL] Health Check: (0ms)
+Traceback (most recent call last):
+  File "E:\FlakersStudio\test_backend.py", line 38, in test_health_check
+    log_test("Health Check", "PASS", f"Service: {data.get('service')}", elapsed)
+  File "E:\FlakersStudio\test_backend.py", line 27, in log_test
+    print(f"   \u2192 {details}")
+  File "C:\Users\RAKESH\AppData\Local\Programs\Python\Python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 3: character maps to <undefined>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "E:\FlakersStudio\test_backend.py", line 393, in <module>
+    main()
+  File "E:\FlakersStudio\test_backend.py", line 342, in main
+    if not test_health_check():
+  File "E:\FlakersStudio\test_backend.py", line 44, in test_health_check
+    log_test("Health Check", "FAIL", str(e), 0)
+  File "E:\FlakersStudio\test_backend.py", line 27, in log_test
+    print(f"   \u2192 {details}")
+  File "C:\Users\RAKESH\AppData\Local\Programs\Python\Python310\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 3: character maps to <undefined>

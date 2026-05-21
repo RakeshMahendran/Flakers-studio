@@ -97,13 +97,14 @@ async def metrics():
 
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.getenv("PORT", "8001"))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True if os.getenv("ENVIRONMENT") == "development" else False,
+        port=port,
+        reload=False,  # Disable reload to avoid interference with background tasks
         workers=1,  # Single worker for memory efficiency
-        limit_concurrency=10,  # Limit concurrent connections
+        limit_concurrency=100,  # Increase from 10 to avoid blocking
         timeout_keep_alive=5,  # Reduce keep-alive timeout
-        access_log=False if os.getenv("ENVIRONMENT") == "production" else True  # Disable access logs in production
+        access_log=True  # Enable access logs for debugging
     )

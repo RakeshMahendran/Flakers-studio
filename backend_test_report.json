@@ -1,0 +1,72 @@
+[
+  {
+    "test": "Health Check",
+    "status": "PASS",
+    "details": "Service: FlakersStudio API",
+    "response_time_ms": 2063.55,
+    "timestamp": "2026-05-10T13:27:28.264354"
+  },
+  {
+    "test": "User Registration",
+    "status": "PASS",
+    "details": "User ID: 4f90588d-86e2-4647-b932-2694d2af890f",
+    "response_time_ms": 2174.38,
+    "timestamp": "2026-05-10T13:27:30.438731"
+  },
+  {
+    "test": "Auth: Get Current User",
+    "status": "PASS",
+    "details": "User: test_1778399848@flakers.test, Tenant: Test Tenant",
+    "response_time_ms": 2058.4,
+    "timestamp": "2026-05-10T13:27:32.497128"
+  },
+  {
+    "test": "Create Assistant (WordPress)",
+    "status": "PASS",
+    "details": "Assistant ID: 62b5bcbf-3d8c-4d1f-b7a7-dc9dd57900e9, Job ID: db8a1aa1-8da5-4c49-b890-3ee6c76ebfe3",
+    "response_time_ms": 19255.09,
+    "timestamp": "2026-05-10T13:27:51.752215"
+  },
+  {
+    "test": "Get Assistant",
+    "status": "PASS",
+    "details": "Status: creating, Pages: 0",
+    "response_time_ms": 2083.59,
+    "timestamp": "2026-05-10T13:28:08.840949"
+  },
+  {
+    "test": "List Assistants",
+    "status": "PASS",
+    "details": "Found 1 assistants",
+    "response_time_ms": 2088.8,
+    "timestamp": "2026-05-10T13:28:10.929746"
+  },
+  {
+    "test": "Chat Query (RAG)",
+    "status": "FAIL",
+    "details": "Status: 400, Response: {\"detail\":\"Assistant not ready: creating\"}",
+    "response_time_ms": 2085.88,
+    "timestamp": "2026-05-10T13:28:13.015626"
+  },
+  {
+    "test": "Fast Intent (Small Talk)",
+    "status": "FAIL",
+    "details": "Status: 400",
+    "response_time_ms": 2085.92,
+    "timestamp": "2026-05-10T13:28:15.101545"
+  },
+  {
+    "test": "Chat History",
+    "status": "FAIL",
+    "details": "Status: 400",
+    "response_time_ms": 2079.83,
+    "timestamp": "2026-05-10T13:28:17.181379"
+  },
+  {
+    "test": "Create Assistant (Generic Web)",
+    "status": "PASS",
+    "details": "Assistant ID: 468cbb89-c9f4-41b7-8db1-cb62459a3f3b, Job ID: bc437d41-60c2-4fe8-895e-e602053eb38d",
+    "response_time_ms": 10640.19,
+    "timestamp": "2026-05-10T13:28:27.821571"
+  }
+]
