@@ -100,6 +100,7 @@ class AssistantService:
             project_id=str(project.id),
             tenant_id=str(tenant.id),
             site_url=str(request.site_url),
+            source_type=request.source_type,
             scraping_config=scraping_config,
         )
 
