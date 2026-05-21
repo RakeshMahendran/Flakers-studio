@@ -37,10 +37,28 @@ export interface RagToolResult {
 /**
  * Adapter — coerce the legacy backend payload into the richer
  * `GovernanceDecision` shape the DecisionRenderer consumes.
+ *
+ * Backend → UI prop mapping (the GAP comment in
+ * `@/components/governance/types.ts` is the source of truth):
+ *
+ *   backend `decision`            → `GovernanceDecision.decision`
+ *   backend `answer`              → `GovernanceDecision.answer`
+ *   backend `reason`              → `GovernanceDecision.refusalReason`
+ *   backend `refusal_code`        → `GovernanceDecision.refusalCode`
+ *   backend `confidence`          → `GovernanceDecision.confidence`
+ *   backend `sources[].url|title` → `GovernanceSource.url|title`
+ *   backend `sources[].intent`    → `GovernanceSource.intent`
+ *   backend `sources[].snippet`        → `GovernanceSource.snippet` (often "")
+ *   backend `sources[].relevance_score`→ `GovernanceSource.relevanceScore`
+ *   backend `rules_applied[]` (lower)  → `RuleEvaluation.id` (UPPER) + status
+ *   backend `processing_time_ms`  → `GovernanceDecision.processingTimeMs`
+ *   backend `suggestions[]`       → `GovernanceDecision.suggestions`
+ *   caller-supplied `assistantName` (not on backend response) → header label
  */
 export function ragResultToDecision(
   result: RagToolResult,
   fallbackId = "src",
+  assistantName?: string,
 ): GovernanceDecision | null {
   if (!result || !result.decision) return null;
 
@@ -81,6 +99,7 @@ export function ragResultToDecision(
     ruleEvaluations,
     suggestions: result.suggestions,
     processingTimeMs: result.processing_time_ms,
+    assistantName,
   };
 }
 
@@ -88,18 +107,25 @@ export function ragResultToDecision(
  * Look at a TamboThreadMessage's tool_calls and pull the first
  * `query_rag_backend` result (if any). Returns null while still streaming
  * or if no governance result has landed.
+ *
+ * `assistantName` is threaded through purely so the GovernancePanel
+ * header reads "Acme Bot" instead of the generic "Governance" — it is
+ * NOT part of the backend response.
  */
-export function extractRagDecisionFromMessage(message: {
-  id?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tool_calls?: any[];
-}): GovernanceDecision | null {
+export function extractRagDecisionFromMessage(
+  message: {
+    id?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tool_calls?: any[];
+  },
+  assistantName?: string,
+): GovernanceDecision | null {
   const tc = message.tool_calls?.find(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (call: any) => call.toolName === "query_rag_backend",
   );
   if (!tc?.result) return null;
-  return ragResultToDecision(tc.result, message.id ?? "src");
+  return ragResultToDecision(tc.result, message.id ?? "src", assistantName);
 }
 
 /**
