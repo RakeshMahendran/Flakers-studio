@@ -332,6 +332,7 @@ function ChatBody({ assistant }: { assistant: Assistant }) {
             followUps={followUps}
             onSuggestionClick={handleSuggestionClick}
             onFeedback={handleFeedback}
+            assistantName={assistant.name}
           />
         )}
       </div>
@@ -377,6 +378,7 @@ function ChatMessagesArea({
   followUps,
   onSuggestionClick,
   onFeedback,
+  assistantName,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   messages: any[];
@@ -384,6 +386,7 @@ function ChatMessagesArea({
   followUps: string[];
   onSuggestionClick: (s: string) => void;
   onFeedback: (messageId: string, rating: "up" | "down") => Promise<void>;
+  assistantName?: string;
 }) {
   // We rely on the parent's scrollable container; this is just the
   // content layer. Auto-scroll-to-bottom + pause-on-user-scroll is wired
@@ -443,6 +446,7 @@ function ChatMessagesArea({
         followUpSuggestions={followUps}
         onSuggestionClick={onSuggestionClick}
         onFeedback={(id, rating) => void onFeedback(id, rating)}
+        assistantName={assistantName}
       />
       <div ref={sentinelRef} aria-hidden style={{ height: 1 }} />
     </div>

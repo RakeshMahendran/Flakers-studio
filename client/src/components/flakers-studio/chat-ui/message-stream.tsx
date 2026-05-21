@@ -144,6 +144,7 @@ function AssistantMessage({
   onFeedback,
   showTimestamp,
   timestamp,
+  assistantName,
 }: {
   message: TamboThreadMessage;
   isLoading: boolean;
@@ -152,15 +153,21 @@ function AssistantMessage({
   onFeedback?: (messageId: string, rating: "up" | "down") => void;
   showTimestamp?: boolean;
   timestamp?: Date;
+  /** Threaded into the GovernanceDecision so the side panel header
+   *  shows the assistant name instead of the generic "Governance". */
+  assistantName?: string;
 }) {
   const decision = React.useMemo(
     () =>
-      extractRagDecisionFromMessage({
-        id: message.id,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tool_calls: (message as any).tool_calls,
-      }),
-    [message],
+      extractRagDecisionFromMessage(
+        {
+          id: message.id,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          tool_calls: (message as any).tool_calls,
+        },
+        assistantName,
+      ),
+    [message, assistantName],
   );
 
   const text = React.useMemo(() => getSafeContent(message.content), [
@@ -227,6 +234,9 @@ export interface MessageStreamProps {
   onSuggestionClick: (s: string) => void;
   /** Optional feedback handler — called from AnswerCard's thumbs up/down. */
   onFeedback?: (messageId: string, rating: "up" | "down") => void;
+  /** Threaded into each governed decision so the GovernancePanel header
+   *  renders the assistant's actual name. */
+  assistantName?: string;
 }
 
 export function MessageStream({
@@ -235,6 +245,7 @@ export function MessageStream({
   followUpSuggestions,
   onSuggestionClick,
   onFeedback,
+  assistantName,
 }: MessageStreamProps) {
   // We only render user + assistant messages; system / tool / sub-thread
   // messages are filtered out for the redesigned stream.
@@ -306,6 +317,7 @@ export function MessageStream({
                 onFeedback={onFeedback}
                 showTimestamp={showTs}
                 timestamp={cur}
+                assistantName={assistantName}
               />
             </div>
           );
