@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from backend.config.settings import settings
-from backend.api.routes import assistant, chat, auth, projects, analytics, public_chat, status
+from backend.api.routes import admin, assistant, chat, auth, projects, analytics, public_chat, scraping, status
 from backend.config.database import init_db
 from backend.config.logging import configure_logging, log_context
 from backend.observability.metrics import metrics_response
@@ -70,6 +70,8 @@ app.include_router(projects.router, prefix="/api", tags=["projects"])
 app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
 app.include_router(public_chat.router, prefix="/api/v1", tags=["public-chat"])
 app.include_router(status.router, prefix="/api/v1", tags=["status"])
+app.include_router(admin.router, prefix="/api/v1")
+app.include_router(scraping.router, prefix="/api/v1")
 
 
 @app.middleware("http")

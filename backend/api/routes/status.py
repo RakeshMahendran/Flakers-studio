@@ -241,9 +241,9 @@ async def get_active_jobs(
 ):
     """Get all currently active jobs"""
     try:
-        from sqlalchemy import select
+        from sqlalchemy import select, func
         from backend.models.content import IngestionJob
-        
+
         # Get active jobs from database
         result = await db.execute(
             select(IngestionJob)
@@ -269,9 +269,11 @@ async def get_active_jobs(
             for job in jobs
         ]
         
-        # Get total job count
+        # Get total job count, scoped to the current tenant.
         total_result = await db.execute(
-            select(func.count()).select_from(IngestionJob)
+            select(func.count())
+            .select_from(IngestionJob)
+            .where(IngestionJob.tenant_id == current_tenant.id)
         )
         total_jobs = total_result.scalar() or 0
         
