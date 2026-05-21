@@ -24,6 +24,10 @@ from backend.models.content import ContentIntent
 
 logger = logging.getLogger(__name__)
 
+# DEBUG: Verify this file is being loaded with the fix
+print(f"[DEBUG-IMPORT] content_processor.py loaded at {datetime.now()}")
+logger.info("[DEBUG-IMPORT] content_processor.py module loaded - fix should be present")
+
 
 def _run_async(coro):
     """Run an async coroutine to completion from a sync caller.
@@ -84,6 +88,9 @@ class ContentProcessor:
         except Exception as e:
             logger.error(f"Failed to initialize tiktoken: {str(e)}")
             raise
+
+        # DEBUG: Verify _detect_language method exists
+        logger.info(f"[DEBUG-INIT] ContentProcessor initialized. Has _detect_language: {hasattr(self, '_detect_language')}")
 
         # Build (or accept) a semantic chunker instance. Single instance
         # per ContentProcessor so the in-memory embedding cache is
@@ -221,6 +228,26 @@ class ContentProcessor:
         # Split on whitespace and filter empty strings
         words = [w for w in text.split() if w.strip()]
         return len(words)
+
+    def _detect_language(self, text: str) -> str:
+        """Detect language of text
+
+        Simple heuristic-based language detection.
+        Returns 'en' for English (default) or 'unknown' for non-Latin scripts.
+        For production use, consider langdetect or fasttext.
+        """
+        if not text or not text.strip():
+            return "en"
+
+        # Simple heuristic: check for non-ASCII characters
+        # If more than 30% non-ASCII, mark as unknown
+        text_sample = text[:1000]  # Check first 1000 chars
+        non_ascii = sum(1 for c in text_sample if ord(c) > 127)
+        if non_ascii > len(text_sample) * 0.3:
+            return "unknown"
+
+        # Default to English for ASCII text
+        return "en"
     
     def _generate_deterministic_chunk_id(
         self, 

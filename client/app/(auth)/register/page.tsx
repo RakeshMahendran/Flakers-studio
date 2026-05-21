@@ -10,7 +10,7 @@
  */
 import * as React from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowRight, MailCheck, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, Eye, EyeOff, MailCheck, ShieldCheck } from "lucide-react";
 import { Button, Input } from "@/components/ui/primitives";
 import { confidenceColor } from "@/lib/design-system";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
@@ -75,6 +75,7 @@ export default function RegisterPage() {
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false);
   const [tenant, setTenant] = React.useState("");
   const [tenantTouched, setTenantTouched] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -246,17 +247,30 @@ export default function RegisterPage() {
           >
             Password
           </label>
-          <Input
-            id="register-password"
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="At least 8 characters"
-            disabled={isLoading}
-          />
+          <div className="relative">
+            <Input
+              id="register-password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              disabled={isLoading}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              tabIndex={-1}
+              className="absolute right-1 top-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
           {password ? (
             <div className="space-y-1 pt-1" aria-live="polite">
               <div

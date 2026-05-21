@@ -55,15 +55,16 @@ class ContentDiscoveryService:
     ) -> str:
         """
         Start content discovery process - scrapes website and stores in database
-        
+
         Returns:
             job_id: UUID of the discovery job
         """
         job_id = str(uuid.uuid4())
-        
-        logger.info(f"Starting content discovery for {site_url}")
-        
+
+        logger.info(f"[DISCOVERY] Starting content discovery for {site_url} (source_type={source_type})")
+
         # Create discovery job
+        logger.info(f"[DISCOVERY] Creating ingestion job in database")
         async with AsyncSessionLocal() as db:
             job = IngestionJob(
                 id=job_id,
@@ -75,14 +76,17 @@ class ContentDiscoveryService:
             )
             db.add(job)
             await db.commit()
-        
+        logger.info(f"[DISCOVERY] Job {job_id} created in database")
+
         # Start background scraping
+        logger.info(f"[DISCOVERY] Creating background task for job {job_id}")
         asyncio.create_task(
             self._execute_discovery(
                 job_id, assistant_id, site_url, source_type, scraping_config, progress_callback
             )
         )
-        
+        logger.info(f"[DISCOVERY] Background task created, returning job_id")
+
         return job_id
     
     async def _execute_discovery(

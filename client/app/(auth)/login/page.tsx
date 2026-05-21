@@ -10,7 +10,7 @@
  */
 import * as React from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowRight, Github } from "lucide-react";
+import { AlertCircle, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { Button, Input } from "@/components/ui/primitives";
 import { useAuth } from "@/contexts/auth-context";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
@@ -20,6 +20,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -116,16 +117,29 @@ export default function LoginPage() {
               Forgot?
             </Link>
           </div>
-          <Input
-            id="login-password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Your password"
-            disabled={isLoading}
-          />
+          <div className="relative">
+            <Input
+              id="login-password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Your password"
+              disabled={isLoading}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              tabIndex={-1}
+              className="absolute right-1 top-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-sunken)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
         <Button
@@ -140,50 +154,13 @@ export default function LoginPage() {
           {!isLoading ? <ArrowRight className="ml-1 h-4 w-4" aria-hidden /> : null}
         </Button>
 
-        <div className="relative py-1">
-          <div className="absolute inset-0 flex items-center" aria-hidden>
-            <div className="w-full border-t border-[var(--color-border-subtle)]" />
-          </div>
-          <div className="relative flex justify-center">
-            <span className="bg-[var(--color-background)] px-3 text-xs uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
-              or continue with
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {/* TODO(auth): wire up OAuth once /auth/oauth/{provider} ships. */}
-          <Button
-            type="button"
-            variant="outline"
-            size="md"
-            disabled
-            aria-disabled
-            title="Coming soon"
-            className="w-full"
-          >
-            <GoogleGlyph />
-            Google
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="md"
-            disabled
-            aria-disabled
-            title="Coming soon"
-            className="w-full"
-          >
-            <Github className="h-4 w-4" aria-hidden />
-            GitHub
-          </Button>
-        </div>
       </form>
     </AuthSplitLayout>
   );
 }
 
-/* ----- inline brand glyph (avoids a fontawesome / svg-set dep) ------ */
+/* ----- inline brand glyph kept for future OAuth wiring ----- */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function GoogleGlyph() {
   return (
     <svg

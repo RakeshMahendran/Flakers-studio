@@ -3,11 +3,14 @@ Assistant domain service extracted from route handlers.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 import uuid
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from backend.ingestion.content_discovery import ContentDiscoveryService
 from backend.ingestion.status_updater import StatusUpdateService
@@ -43,9 +46,11 @@ class AssistantService:
         return result.scalars().all()
 
     async def create_assistant(self, db: AsyncSession, tenant: Tenant, request: Any) -> Dict[str, Any]:
+        logger.info(f"[CREATE_ASSISTANT] Starting - tenant={tenant.id}, name={request.name}")
         governance_rules = self.generate_governance_rules(request.template)
         allowed_intents = self.get_template_intents(request.template)
 
+        logger.info(f"[CREATE_ASSISTANT] Querying for existing project")
         result = await db.execute(
             select(Project).where(
                 Project.tenant_id == tenant.id,
@@ -55,6 +60,7 @@ class AssistantService:
         project = result.scalar_one_or_none()
 
         if not project:
+            logger.info(f"[CREATE_ASSISTANT] Creating new default project")
             project = Project(
                 id=uuid.uuid4(),
                 tenant_id=tenant.id,
@@ -65,6 +71,7 @@ class AssistantService:
             db.add(project)
             await db.flush()
 
+        logger.info(f"[CREATE_ASSISTANT] Creating assistant record")
         assistant = Assistant(
             id=uuid.uuid4(),
             project_id=project.id,
@@ -80,8 +87,10 @@ class AssistantService:
             widget_config=self.default_widget_config(),
         )
         db.add(assistant)
+        logger.info(f"[CREATE_ASSISTANT] Committing assistant to database")
         await db.commit()
         await db.refresh(assistant)
+        logger.info(f"[CREATE_ASSISTANT] Assistant created with ID: {assistant.id}")
 
         scraping_config = None
         if request.scraping_config:
@@ -94,17 +103,21 @@ class AssistantService:
                 excluded_patterns=request.scraping_config.get("excluded_patterns", []),
             )
 
+        logger.info(f"[CREATE_ASSISTANT] Starting discovery service for source_type={request.source_type}")
         discovery_service = ContentDiscoveryService()
         job_id = await discovery_service.start_discovery(
             assistant_id=str(assistant.id),
             project_id=str(project.id),
             tenant_id=str(tenant.id),
             site_url=str(request.site_url),
+            source_type=request.source_type,  # FIX: Pass source_type parameter
             scraping_config=scraping_config,
         )
+        logger.info(f"[CREATE_ASSISTANT] Discovery started with job_id: {job_id}")
 
         assistant.status_message = f"Discovering content from {request.site_url}"
         await db.commit()
+        logger.info(f"[CREATE_ASSISTANT] Completed successfully")
         return {"assistant": assistant, "job_id": job_id}
 
     async def get_assistant(self, db: AsyncSession, tenant: Tenant, assistant_id: str) -> Optional[Assistant]:

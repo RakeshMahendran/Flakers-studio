@@ -137,6 +137,7 @@ export function CommandPalette({
   const router = useRouter();
   const [query, setQuery] = React.useState("");
   const [active, setActive] = React.useState(0);
+  const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
 
@@ -265,27 +266,34 @@ export function CommandPalette({
         keywords: ["shortcuts", "keys", "help"],
         onSelect: () => {
           close();
+          // Defer to next tick so the palette finishes closing before the dialog opens.
+          setTimeout(() => setShortcutsOpen(true), 50);
         },
       },
       {
         id: "help-docs",
         label: "Documentation",
-        hint: "Read the docs",
+        hint: "Open in-app docs",
         icon: HelpCircle,
         section: "help",
         keywords: ["docs", "help", "documentation"],
         onSelect: () => {
           close();
+          router.push("/docs");
         },
       },
       {
         id: "help-support",
         label: "Contact support",
+        hint: "Email the team",
         icon: LifeBuoy,
         section: "help",
-        keywords: ["support", "help", "contact"],
+        keywords: ["support", "help", "contact", "email"],
         onSelect: () => {
           close();
+          if (typeof window !== "undefined") {
+            window.location.href = "mailto:support@flakers.studio?subject=Support%20request";
+          }
         },
       }
     );
@@ -369,8 +377,8 @@ export function CommandPalette({
       }
     };
 
-    dialog.addEventListener('keydown', handleTab);
-    return () => dialog.removeEventListener('keydown', handleTab);
+    dialog.addEventListener('keydown', handleTab as EventListener);
+    return () => dialog.removeEventListener('keydown', handleTab as EventListener);
   }, [open]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -388,6 +396,7 @@ export function CommandPalette({
   };
 
   return (
+    <>
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay
@@ -555,6 +564,111 @@ export function CommandPalette({
               </span>
             </div>
             <span>FlakersStudio</span>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+
+    <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* ShortcutsDialog — surfaced via "Keyboard shortcuts" in the palette   */
+/* ------------------------------------------------------------------ */
+
+interface ShortcutRow {
+  combo: string[];
+  label: string;
+}
+
+const SHORTCUTS: { section: string; rows: ShortcutRow[] }[] = [
+  {
+    section: "Navigation",
+    rows: [
+      { combo: ["⌘", "K"], label: "Open command palette" },
+      { combo: ["⌘", "B"], label: "Toggle sidebar (when palette open)" },
+      { combo: ["Esc"], label: "Close dialog or palette" },
+    ],
+  },
+  {
+    section: "Command palette",
+    rows: [
+      { combo: ["↑", "↓"], label: "Navigate items" },
+      { combo: ["↵"], label: "Run selected action" },
+      { combo: ["Tab"], label: "Cycle focusable elements" },
+    ],
+  },
+  {
+    section: "Quick actions",
+    rows: [
+      { combo: ["N"], label: "Create assistant" },
+      { combo: [","], label: "Open settings" },
+      { combo: ["?"], label: "Show this shortcuts list" },
+    ],
+  },
+];
+
+function ShortcutsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay
+          className={cn(
+            "fixed inset-0 z-50 bg-[oklch(0.16_0.012_270/0.55)] backdrop-blur-sm",
+            "data-[state=open]:animate-cmd-fade-in data-[state=closed]:animate-cmd-fade-out"
+          )}
+        />
+        <Dialog.Content
+          aria-describedby={undefined}
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
+            "w-full max-w-md rounded-lg border border-[var(--color-border-subtle)]",
+            "bg-[var(--color-surface)] p-6 shadow-[var(--elevation-3)]",
+            "data-[state=open]:animate-cmd-content-in data-[state=closed]:animate-cmd-content-out"
+          )}
+        >
+          <Dialog.Title className="text-base font-semibold text-[var(--color-text-primary)]">
+            Keyboard shortcuts
+          </Dialog.Title>
+          <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+            Speed up navigation across FlakersStudio.
+          </p>
+          <div className="mt-5 flex flex-col gap-5">
+            {SHORTCUTS.map((s) => (
+              <div key={s.section} className="flex flex-col gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                  {s.section}
+                </p>
+                <ul className="flex flex-col gap-1.5">
+                  {s.rows.map((row, i) => (
+                    <li
+                      key={i}
+                      className="flex items-center justify-between rounded-md px-1 py-1 text-sm"
+                    >
+                      <span className="text-[var(--color-text-secondary)]">{row.label}</span>
+                      <span className="flex items-center gap-1">
+                        {row.combo.map((k, j) => (
+                          <kbd
+                            key={j}
+                            className="inline-flex min-w-[1.5rem] items-center justify-center rounded border border-[var(--color-border-default)] bg-[var(--color-surface)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-secondary)]"
+                          >
+                            {k}
+                          </kbd>
+                        ))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </Dialog.Content>
       </Dialog.Portal>

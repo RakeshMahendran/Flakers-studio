@@ -3,6 +3,7 @@ Status Monitoring API
 Real-time status updates and system monitoring
 """
 from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
@@ -269,9 +270,11 @@ async def get_active_jobs(
             for job in jobs
         ]
         
-        # Get total job count
+        # Get total job count for this tenant
         total_result = await db.execute(
-            select(func.count()).select_from(IngestionJob)
+            select(func.count())
+            .select_from(IngestionJob)
+            .where(IngestionJob.tenant_id == current_tenant.id)
         )
         total_jobs = total_result.scalar() or 0
         

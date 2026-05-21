@@ -69,6 +69,21 @@ export async function apiPut(
 }
 
 /**
+ * Make an authenticated PATCH request
+ */
+export async function apiPatch(
+  url: string,
+  data?: any,
+  token?: string
+): Promise<Response> {
+  return apiClient(url, {
+    method: 'PATCH',
+    body: data ? JSON.stringify(data) : undefined,
+    token,
+  });
+}
+
+/**
  * Make an authenticated DELETE request
  */
 export async function apiDelete(url: string, token?: string): Promise<Response> {
