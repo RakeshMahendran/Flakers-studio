@@ -71,7 +71,10 @@ class AzureAIService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message}
                 ],
-                max_tokens=max_tokens,
+                # max_completion_tokens supersedes max_tokens on newer Azure
+                # OpenAI chat models (GPT-4o, GPT-5, o-series). max_tokens
+                # raises "Unsupported parameter" on those deployments.
+                max_completion_tokens=max_tokens,
                 temperature=temperature,
                 top_p=0.9,
                 frequency_penalty=0,
@@ -139,7 +142,10 @@ class AzureAIService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
                 ],
-                max_tokens=max_tokens,
+                # Newer Azure OpenAI chat models require max_completion_tokens
+                # (max_tokens triggers an "Unsupported parameter" 400). Same
+                # fix as the primary generate_response call above.
+                max_completion_tokens=max_tokens,
                 temperature=temperature,
                 top_p=0.9,
             )
