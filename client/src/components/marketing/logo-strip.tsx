@@ -17,7 +17,7 @@ interface LogoStripProps {
 }
 
 const LOGOS = [
-  { name: "ACME", font: "italic font-serif tracking-tight" },
+  { name: "ACME", font: "italic font-semibold tracking-tight" },
   { name: "Northwind", font: "font-light tracking-[0.2em] uppercase" },
   { name: "Aperture", font: "font-bold tracking-wide" },
   { name: "Hyperion", font: "font-semibold italic" },

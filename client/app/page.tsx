@@ -455,10 +455,11 @@ function Pricing() {
               elevation={tier.highlighted ? 3 : 1}
               padding="lg"
               className={cn(
-                "relative flex h-full flex-col transition-shadow",
+                "relative flex h-full flex-col",
+                "transition-[transform,box-shadow,border-color] duration-[var(--duration-base)] ease-[var(--ease-out)]",
                 tier.highlighted
                   ? "border-[var(--color-brand-border)] ring-1 ring-[var(--color-brand-border)]"
-                  : "hover:shadow-[var(--elevation-2)]"
+                  : "hover:-translate-y-0.5 hover:border-[var(--color-brand-border)] hover:shadow-[var(--elevation-2)]"
               )}
             >
               {tier.highlighted ? (

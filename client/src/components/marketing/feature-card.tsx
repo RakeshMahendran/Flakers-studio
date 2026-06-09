@@ -81,7 +81,10 @@ export function FeatureCard({
       <Card
         elevation={1}
         padding="lg"
-        className="h-full hover:shadow-[var(--card-shadow-hover)] hover:-translate-y-0.5 transition-transform"
+        className={cn(
+          "h-full transition-[transform,box-shadow,border-color] duration-[var(--duration-base)] ease-[var(--ease-out)]",
+          "hover:-translate-y-0.5 hover:border-[var(--color-brand-border)] hover:shadow-[var(--elevation-2)]"
+        )}
       >
         <div
           aria-hidden
