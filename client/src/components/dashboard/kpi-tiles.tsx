@@ -159,6 +159,7 @@ export const KpiTiles = React.memo(function KpiTiles({ data }: KpiTilesProps) {
           <button
             type="button"
             aria-label="Refusals breakdown. Click for details by governance rule."
+            title="Refusals — click for per-rule breakdown"
             className={cn(
               "group relative flex flex-col gap-3 rounded-xl border p-4 text-left",
               "border-[var(--color-border-subtle)] bg-[var(--color-surface)]",
@@ -175,7 +176,7 @@ export const KpiTiles = React.memo(function KpiTiles({ data }: KpiTilesProps) {
                 Refusals
               </span>
               <span className="text-[10px] text-[var(--color-text-muted)]">
-                Hover for breakdown
+                Click for breakdown
               </span>
             </div>
             <div className="flex items-end justify-between gap-3">
@@ -207,19 +208,25 @@ export const KpiTiles = React.memo(function KpiTiles({ data }: KpiTilesProps) {
               </span>
               <TrendingUp className="h-3 w-3 text-[var(--color-text-muted)]" />
             </div>
-            <ul className="flex flex-col gap-1.5">
-              {data.refusalsBreakdown.map((b) => (
-                <li
-                  key={b.rule}
-                  className="flex items-center justify-between gap-2 text-sm"
-                >
-                  <span className="truncate text-[var(--color-text-secondary)]">{b.rule}</span>
-                  <span className="font-semibold text-[var(--color-text-primary)]">
-                    {b.count}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            {data.refusalsBreakdown.length === 0 ? (
+              <p className="py-2 text-center text-xs text-[var(--color-text-muted)]">
+                No refusals in the last 30 days.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-1.5">
+                {data.refusalsBreakdown.map((b) => (
+                  <li
+                    key={b.rule}
+                    className="flex items-center justify-between gap-2 text-sm"
+                  >
+                    <span className="truncate text-[var(--color-text-secondary)]">{b.rule}</span>
+                    <span className="font-semibold text-[var(--color-text-primary)]">
+                      {b.count}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             <Popover.Arrow className="fill-[var(--color-surface-elevated)]" />
           </Popover.Content>
         </Popover.Portal>

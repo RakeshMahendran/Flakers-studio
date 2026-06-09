@@ -13,8 +13,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AlertTriangle, X } from "lucide-react";
 
-import { Skeleton } from "@/components/ui/primitives";
+import { Button, Skeleton } from "@/components/ui/primitives";
+import { cn } from "@/lib/design-system";
 import { useAuth } from "@/contexts/auth-context";
 import { apiGet, apiDelete } from "@/lib/api-client";
 import { useAppShell } from "@/components/layout/app-shell";
@@ -229,22 +231,87 @@ function buildKpiData(assistants: Assistant[]): KpiTileData {
 
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-8">
-      <Skeleton className="h-44 w-full rounded-2xl" />
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading dashboard">
+      {/* Greeting strip skeleton — mirrors the real header so the layout
+          doesn't jump when content arrives. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-7 w-56 rounded-md" />
+          <Skeleton className="h-4 w-40 rounded-md" />
+        </div>
+        <Skeleton className="h-10 w-36 rounded-md" />
+      </div>
+      {/* Quick actions / onboarding row */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-20 w-full rounded-xl" />
         ))}
       </div>
+      {/* Assistant grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-60 w-full rounded-xl" />
         ))}
       </div>
+      {/* KPI row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-28 w-full rounded-xl" />
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* =============================================================== */
+/* Inline error banner — surfaces transient fetch failures gently   */
+/* without throwing the user back to a full error page.             */
+/* =============================================================== */
+
+interface FetchErrorNoticeProps {
+  onRetry: () => void;
+  onDismiss: () => void;
+  isRetrying?: boolean;
+}
+
+function FetchErrorNotice({ onRetry, onDismiss, isRetrying }: FetchErrorNoticeProps) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "flex items-start gap-3 rounded-xl border p-4",
+        "border-[var(--color-caution-border)] bg-[var(--color-caution-soft)]",
+        "shadow-[var(--elevation-1)]"
+      )}
+    >
+      <AlertTriangle
+        className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-caution-strong)]"
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="text-sm font-medium text-[var(--color-text-primary)]">
+          Couldn&rsquo;t reach the assistants service
+        </p>
+        <p className="text-xs text-[var(--color-text-secondary)]">
+          Showing recent sample data. Your real workspace will appear once the
+          connection recovers.
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button size="sm" variant="outline" onClick={onRetry} isLoading={isRetrying}>
+          Retry
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={onDismiss}
+          aria-label="Dismiss error notice"
+          title="Dismiss"
+          className="h-8 w-8"
+        >
+          <X className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );
@@ -261,6 +328,10 @@ export function DashboardScreen() {
 
   const [assistants, setAssistants] = useState<Assistant[]>([]);
   const [loading, setLoading] = useState(true);
+  // `fetchError` is non-null when the most recent fetch failed AND we fell
+  // back to seed data. Cleared on a successful retry or user dismiss.
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const fetchingRef = useRef(false);
 
   /* -------------------------------------------------------------
@@ -301,16 +372,26 @@ export function DashboardScreen() {
           ? data.assistants.map(normalizeAssistant)
           : [];
         setAssistants(list);
+        // Successful fetch clears any prior error banner.
+        setFetchError(null);
       } else {
         setAssistants(SEED_ASSISTANTS);
+        setFetchError(`Service returned ${response.status}`);
       }
     } catch (err) {
       console.error("Failed to fetch assistants:", err);
       setAssistants(SEED_ASSISTANTS);
+      setFetchError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
+      setIsRetrying(false);
       fetchingRef.current = false;
     }
+  };
+
+  const handleRetryFetch = () => {
+    setIsRetrying(true);
+    fetchAssistants();
   };
 
   /* -------------------------------------------------------------
@@ -394,6 +475,17 @@ export function DashboardScreen() {
         tenantName={user?.tenantName}
         onCreate={handleCreate}
       />
+
+      {/* Gentle inline notice when the most recent fetch failed. We've
+          already fallen back to seed data so the rest of the page is
+          interactive — this just gives the user a way to retry. */}
+      {fetchError ? (
+        <FetchErrorNotice
+          onRetry={handleRetryFetch}
+          onDismiss={() => setFetchError(null)}
+          isRetrying={isRetrying}
+        />
+      ) : null}
 
       {/* Empty-state onboarding takes priority over the action strip */}
       {!hasRealData ? (

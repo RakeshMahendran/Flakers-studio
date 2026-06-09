@@ -150,16 +150,28 @@ export function OnboardingChecklist({
                   </p>
                 </div>
                 {!step.done && isNext ? (
-                  <Button size="sm" variant="primary" onClick={() => router.push(step.href)}>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => router.push(step.href)}
+                    aria-label={`${step.ctaLabel} — ${step.title}`}
+                  >
                     {step.ctaLabel}
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 ) : !step.done ? (
+                  // Future step: keep the CTA discoverable (faint by default,
+                  // gently lifts on hover/focus) instead of hiding it entirely.
+                  // Fully-hidden controls aren't keyboard-discoverable.
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => router.push(step.href)}
-                    className="opacity-0 transition-opacity group-hover:opacity-100"
+                    aria-label={`${step.ctaLabel} — ${step.title}`}
+                    className={cn(
+                      "opacity-50 transition-opacity duration-[var(--duration-base)]",
+                      "group-hover:opacity-90 focus-visible:opacity-100"
+                    )}
                   >
                     {step.ctaLabel}
                   </Button>

@@ -79,12 +79,13 @@ export function QuickActions({
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
             )}
           >
-            {/* Gradient ring on hover */}
+            {/* Subtle gradient ring on hover — capped at low opacity so the
+                hover state feels like a gentle highlight, not a glaring frame. */}
             <span
               aria-hidden
               className={cn(
                 "pointer-events-none absolute inset-0 rounded-xl opacity-0 transition-opacity",
-                "duration-[var(--duration-base)] group-hover:opacity-100",
+                "duration-[var(--duration-base)] group-hover:opacity-40",
                 "bg-[image:var(--gradient-brand)]",
                 "[mask:linear-gradient(#000,#000)_content-box,linear-gradient(#000,#000)]",
                 "[mask-composite:exclude] [-webkit-mask-composite:xor]",

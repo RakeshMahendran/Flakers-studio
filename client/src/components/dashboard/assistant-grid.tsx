@@ -29,7 +29,7 @@ export function AssistantGrid({
     return (
       <section
         className={cn(
-          "relative overflow-hidden rounded-2xl border p-8 md:p-12",
+          "relative overflow-hidden rounded-xl border p-8 md:p-12",
           "border-[var(--color-border-subtle)] bg-[var(--color-surface)]",
           "shadow-[var(--elevation-1)]"
         )}
@@ -68,7 +68,7 @@ export function AssistantGrid({
 
   return (
     <section aria-label="Your assistants">
-      <div className="mb-3 flex items-end justify-between">
+      <div className="mb-4 flex items-end justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-[var(--color-text-primary)]">
             Your assistants
@@ -92,11 +92,15 @@ export function AssistantGrid({
         <button
           type="button"
           onClick={onCreate}
+          aria-label="Create a new assistant"
+          title="Create a new assistant"
           className={cn(
             "group relative flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-5",
             "border-[var(--color-border-default)] bg-transparent",
             "transition-[border-color,background] duration-[var(--duration-base)]",
-            "hover:border-[var(--color-brand)] hover:bg-[var(--color-brand-soft)]",
+            // Soften the hover fill: a hint of brand-soft instead of the
+            // full brand-soft swatch (which can read as a jarring color swap).
+            "hover:border-[var(--color-brand-border)] hover:bg-[var(--color-surface-sunken)]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
           )}
         >
