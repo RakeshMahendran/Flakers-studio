@@ -342,12 +342,35 @@ function ChatInterfaceTamboInner({ assistantId }: ChatInterfaceTamboProps) {
           token: user.accessToken,
           body: JSON.stringify({
             assistant_id: assistant.id,
-            message: text,
+            // Backend's ChatQueryRequest field is `user_message`, not `message`.
+            // Sending `message` produced a 422 because Pydantic dropped it as
+            // an unknown extra and then flagged user_message as missing.
+            user_message: text,
             ...(sessionId ? { session_id: sessionId } : {}),
           }),
         });
         if (!res.ok) {
-          throw new Error(`Request failed with status ${res.status}`);
+          // Surface backend detail (status + parsed detail) instead of a
+          // generic 'status N' string, matching the pattern used in the
+          // creation flow.
+          let detail: string | undefined;
+          try {
+            const body = await res.json();
+            detail = body?.detail || body?.error || body?.message;
+            if (Array.isArray(detail)) {
+              // FastAPI/Pydantic 422 detail is a list of {loc, msg, type}
+              detail = detail
+                .map((d: { loc?: unknown; msg?: string }) =>
+                  `${Array.isArray(d.loc) ? d.loc.join(".") : ""} ${d.msg ?? ""}`.trim()
+                )
+                .join("; ");
+            }
+          } catch {
+            detail = await res.text().catch(() => undefined);
+          }
+          throw new Error(
+            `Request failed with status ${res.status}${detail ? `: ${detail}` : ""}`
+          );
         }
         const data: ChatQueryResponse = await res.json();
 
