@@ -1,21 +1,38 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Streamdown } from "streamdown";
-import type { TamboThreadMessage } from "@tambo-ai/react";
+import { AlertCircle, RotateCw } from "lucide-react";
 
 import { cn } from "@/lib/design-system";
 import { DecisionRenderer } from "@/components/governance";
-import { getSafeContent } from "@/lib/thread-hooks";
-import { markdownComponents } from "@/components/tambo/markdown-components";
 
-import { SuggestionChip } from "./suggestion-chip";
 import {
-  extractRagDecisionFromMessage,
+  ragResultToDecision,
   shouldShowTimestamp,
   formatRelativeTime,
+  type RagToolResult,
 } from "./chat-types";
+
+/* --------------------------------------------------------------------- */
+/* Public — native message shape (Tambo-free)                           */
+/* --------------------------------------------------------------------- */
+export type ChatMessageStatus = "sent" | "failed";
+
+export interface ChatMessage {
+  /** Stable id used as a React key + DecisionRenderer source-id prefix. */
+  id: string;
+  role: "user" | "assistant";
+  /** Plain-text content (user messages and assistant refusal/answer text). */
+  content: string;
+  /** ISO-8601 timestamp. */
+  createdAt: string;
+  /** Present on assistant messages — the parsed rag pipeline result. */
+  ragResult?: RagToolResult;
+  /** Used to flag user messages that failed to send. */
+  status?: ChatMessageStatus;
+  /** Optional error string shown under failed user messages. */
+  errorMessage?: string;
+}
 
 /* --------------------------------------------------------------------- */
 /* User message bubble                                                   */
@@ -24,10 +41,16 @@ function UserBubble({
   text,
   showTimestamp,
   timestamp,
+  failed,
+  errorMessage,
+  onRetry,
 }: {
   text: string;
   showTimestamp?: boolean;
   timestamp?: Date;
+  failed?: boolean;
+  errorMessage?: string;
+  onRetry?: () => void;
 }) {
   return (
     <div className="group flex flex-col items-end">
@@ -39,116 +62,85 @@ function UserBubble({
       <div
         className={cn(
           "max-w-[80%] rounded-2xl rounded-br-sm",
-          "bg-[var(--color-brand)] text-[var(--color-brand-foreground)]",
+          "bg-[var(--color-brand-soft)] text-[var(--color-text-primary)]",
           "px-4 py-2.5 text-[15px] leading-relaxed",
           "shadow-[var(--elevation-1)]",
+          failed && "border border-[var(--color-refuse-border)]",
         )}
       >
         <p className="whitespace-pre-wrap break-words">{text}</p>
       </div>
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------------- */
-/* Streaming "thinking" indicator (3-dot pulse)                          */
-/* --------------------------------------------------------------------- */
-function StreamingDots() {
-  return (
-    <div className="flex items-center gap-1.5 px-1 py-2" aria-label="Assistant thinking">
-      <span
-        className="h-2 w-2 rounded-full bg-[var(--color-brand)] opacity-70 animate-bounce"
-        style={{ animationDelay: "0ms" }}
-      />
-      <span
-        className="h-2 w-2 rounded-full bg-[var(--color-brand)] opacity-70 animate-bounce"
-        style={{ animationDelay: "120ms" }}
-      />
-      <span
-        className="h-2 w-2 rounded-full bg-[var(--color-brand)] opacity-70 animate-bounce"
-        style={{ animationDelay: "240ms" }}
-      />
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------------- */
-/* Streaming text bubble — shown while tokens are arriving               */
-/* --------------------------------------------------------------------- */
-function StreamingTextBubble({ text }: { text: string }) {
-  return (
-    <motion.div
-      key="streaming-text"
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, transition: { duration: 0.15 } }}
-      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-      className={cn(
-        "rounded-xl border bg-[var(--color-surface)]",
-        "border-[var(--color-border-subtle)]",
-        "px-4 py-3 text-[15px] leading-relaxed text-[var(--color-text-primary)]",
-        "shadow-[var(--elevation-1)]",
-        "[&_p]:my-1 [&_p]:leading-relaxed",
-      )}
-    >
-      {text ? (
-        <Streamdown components={markdownComponents}>{text}</Streamdown>
-      ) : (
-        <StreamingDots />
-      )}
-      {text ? (
-        <span
-          className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-[var(--color-brand)]"
-          aria-hidden
-        />
+      {failed ? (
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-refuse)]">
+            <AlertCircle className="h-3 w-3" aria-hidden />
+            {errorMessage ?? "Failed to send"}
+          </span>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium",
+                "text-[var(--color-brand)] hover:bg-[var(--color-brand-soft)]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
+              )}
+            >
+              <RotateCw className="h-3 w-3" aria-hidden />
+              Retry
+            </button>
+          ) : null}
+        </div>
       ) : null}
-    </motion.div>
+    </div>
   );
 }
 
 /* --------------------------------------------------------------------- */
-/* Suggested follow-ups under each completed assistant answer            */
+/* Thinking indicator                                                    */
 /* --------------------------------------------------------------------- */
-function FollowUpRow({
-  suggestions,
-  onPick,
-}: {
-  suggestions: string[];
-  onPick: (s: string) => void;
-}) {
-  if (!suggestions.length) return null;
+function ThinkingIndicator() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1, duration: 0.2 }}
-      className="mt-3 flex flex-wrap gap-2"
+    <div
+      className={cn(
+        "inline-flex items-center gap-2 rounded-xl border",
+        "bg-[var(--color-surface)] border-[var(--color-border-subtle)]",
+        "px-3 py-2 shadow-[var(--elevation-1)]",
+      )}
+      role="status"
+      aria-live="polite"
     >
-      {suggestions.slice(0, 4).map((s) => (
-        <SuggestionChip key={s} onClick={() => onPick(s)}>
-          {s}
-        </SuggestionChip>
-      ))}
-    </motion.div>
+      <div className="flex items-center gap-1" aria-hidden>
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand)] opacity-70 animate-bounce"
+          style={{ animationDelay: "0ms" }}
+        />
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand)] opacity-70 animate-bounce"
+          style={{ animationDelay: "120ms" }}
+        />
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand)] opacity-70 animate-bounce"
+          style={{ animationDelay: "240ms" }}
+        />
+      </div>
+      <span className="text-xs text-[var(--color-text-muted)]">Thinking…</span>
+    </div>
   );
 }
 
 /* --------------------------------------------------------------------- */
-/* Assistant message — handles streaming-to-decision morph              */
+/* Assistant message — renders DecisionRenderer (Answer/Refuse + panels) */
 /* --------------------------------------------------------------------- */
 function AssistantMessage({
   message,
-  isLoading,
-  followUps,
   onSuggestionClick,
   onFeedback,
   showTimestamp,
   timestamp,
   assistantName,
 }: {
-  message: TamboThreadMessage;
-  isLoading: boolean;
-  followUps?: string[];
+  message: ChatMessage;
   onSuggestionClick: (s: string) => void;
   onFeedback?: (messageId: string, rating: "up" | "down") => void;
   showTimestamp?: boolean;
@@ -157,30 +149,14 @@ function AssistantMessage({
    *  shows the assistant name instead of the generic "Governance". */
   assistantName?: string;
 }) {
-  const decision = React.useMemo(
-    () =>
-      extractRagDecisionFromMessage(
-        {
-          id: message.id,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          tool_calls: (message as any).tool_calls,
-        },
-        assistantName,
-      ),
-    [message, assistantName],
-  );
-
-  const text = React.useMemo(() => getSafeContent(message.content), [
-    message.content,
-  ]);
-
-  const showFollowUps = !isLoading && decision?.decision === "ANSWER";
-
-  // We morph from streaming text bubble → DecisionRenderer when:
-  //   1. The message is no longer loading, AND
-  //   2. The governance result has landed (decision !== null).
-  // Until then we show whatever streaming text we have (or the dots).
-  const renderDecision = !isLoading && decision !== null;
+  const decision = React.useMemo(() => {
+    if (!message.ragResult) return null;
+    return ragResultToDecision(
+      message.ragResult,
+      message.id ?? "src",
+      assistantName,
+    );
+  }, [message.id, message.ragResult, assistantName]);
 
   return (
     <div className="group w-full">
@@ -190,31 +166,28 @@ function AssistantMessage({
         </div>
       ) : null}
 
-      <AnimatePresence mode="wait" initial={false}>
-        {renderDecision ? (
-          <motion.div
-            key="decision"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full"
-          >
-            <DecisionRenderer
-              decision={decision!}
-              onSuggestionClick={onSuggestionClick}
-              onFeedback={(rating) =>
-                onFeedback?.(message.id ?? "unknown", rating)
-              }
-            />
-          </motion.div>
-        ) : (
-          <StreamingTextBubble text={typeof text === "string" ? text : ""} />
-        )}
-      </AnimatePresence>
-
-      {showFollowUps && followUps && followUps.length > 0 ? (
-        <FollowUpRow suggestions={followUps} onPick={onSuggestionClick} />
-      ) : null}
+      {decision ? (
+        <DecisionRenderer
+          decision={decision}
+          onSuggestionClick={onSuggestionClick}
+          onFeedback={(rating) =>
+            onFeedback?.(message.id ?? "unknown", rating)
+          }
+        />
+      ) : (
+        // Fallback: assistant message without a rag result (shouldn't usually
+        // happen, but render the raw text rather than nothing).
+        <div
+          className={cn(
+            "rounded-xl border bg-[var(--color-surface)]",
+            "border-[var(--color-border-subtle)]",
+            "px-4 py-3 text-[15px] leading-relaxed text-[var(--color-text-primary)]",
+            "shadow-[var(--elevation-1)]",
+          )}
+        >
+          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -224,119 +197,83 @@ function AssistantMessage({
 /* --------------------------------------------------------------------- */
 
 export interface MessageStreamProps {
-  /** Tambo thread messages (filtered for visible roles by the caller). */
-  messages: TamboThreadMessage[];
-  /** True while the last assistant message is still being generated. */
+  /** Ordered list of messages to display. */
+  messages: ChatMessage[];
+  /** True while the assistant is generating a response. */
   isGenerating: boolean;
-  /** Auto-suggested follow-up prompts to surface on the most-recent answer. */
-  followUpSuggestions?: string[];
-  /** When a SuggestionChip / RefusalCard suggestion is clicked. */
+  /** Suggestion-click handler (re-submits via Composer). */
   onSuggestionClick: (s: string) => void;
-  /** Optional feedback handler — called from AnswerCard's thumbs up/down. */
+  /** Feedback handler — called from AnswerCard's thumbs up/down. */
   onFeedback?: (messageId: string, rating: "up" | "down") => void;
   /** Threaded into each governed decision so the GovernancePanel header
    *  renders the assistant's actual name. */
   assistantName?: string;
+  /** Retry handler for failed user messages. */
+  onRetry?: (messageId: string) => void;
 }
 
 export function MessageStream({
   messages,
   isGenerating,
-  followUpSuggestions,
   onSuggestionClick,
   onFeedback,
   assistantName,
+  onRetry,
 }: MessageStreamProps) {
-  // We only render user + assistant messages; system / tool / sub-thread
-  // messages are filtered out for the redesigned stream.
-  const visible = React.useMemo(
-    () =>
-      messages.filter(
-        (m) =>
-          (m.role === "user" || m.role === "assistant") &&
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          !(m as any).parentMessageId,
-      ),
-    [messages],
-  );
-
-  // A11Y: Announce streaming progress to screen readers
-  const [liveMessage, setLiveMessage] = React.useState('');
-
-  React.useEffect(() => {
-    if (!isGenerating) {
-      setLiveMessage('');
-      return;
-    }
-
-    const lastMsg = visible[visible.length - 1];
-    if (lastMsg?.role === 'assistant') {
-      const text = getSafeContent(lastMsg.content);
-      if (typeof text === 'string' && text.length > 20) {
-        // Announce every ~100 characters to avoid spam
-        const chunks = Math.floor(text.length / 100);
-        if (chunks > 0) {
-          setLiveMessage(`Assistant is responding. ${chunks} section${chunks === 1 ? '' : 's'} received.`);
-        }
-      } else if (typeof text === 'string' && text.length > 0) {
-        setLiveMessage('Assistant is thinking...');
-      }
-    }
-  }, [isGenerating, visible]);
+  // A11Y: announce thinking state to screen readers
+  const liveMessage = isGenerating ? "Assistant is thinking…" : "";
 
   return (
     <>
-      {/* A11Y: Hidden live region for screen reader announcements */}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="false">
         {liveMessage}
       </div>
 
       <div className="mx-auto flex w-full max-w-[768px] flex-col gap-6 px-4 py-8">
-        {visible.map((message, index) => {
-        const prev = visible[index - 1];
-        const cur = (message.createdAt ? new Date(message.createdAt) : new Date());
-        const prevDate = prev?.createdAt ? new Date(prev.createdAt) : undefined;
-        const showTs = shouldShowTimestamp(cur, prevDate);
+        {messages.map((message, index) => {
+          const prev = messages[index - 1];
+          const cur = new Date(message.createdAt);
+          const prevDate = prev?.createdAt ? new Date(prev.createdAt) : undefined;
+          const showTs = shouldShowTimestamp(cur, prevDate);
 
-        const isLast = index === visible.length - 1;
-        const isAssistant = message.role === "assistant";
-        const lastAssistantIsLoading =
-          isLast && isAssistant && isGenerating;
+          if (message.role === "assistant") {
+            return (
+              <div key={message.id} data-role="assistant">
+                <AssistantMessage
+                  message={message}
+                  onSuggestionClick={onSuggestionClick}
+                  onFeedback={onFeedback}
+                  showTimestamp={showTs}
+                  timestamp={cur}
+                  assistantName={assistantName}
+                />
+              </div>
+            );
+          }
 
-        if (isAssistant) {
           return (
-            <div
-              key={message.id ?? `assistant-${index}`}
-              data-role="assistant"
-            >
-              <AssistantMessage
-                message={message}
-                isLoading={lastAssistantIsLoading}
-                followUps={isLast ? followUpSuggestions : undefined}
-                onSuggestionClick={onSuggestionClick}
-                onFeedback={onFeedback}
+            <div key={message.id} data-role="user">
+              <UserBubble
+                text={message.content}
                 showTimestamp={showTs}
                 timestamp={cur}
-                assistantName={assistantName}
+                failed={message.status === "failed"}
+                errorMessage={message.errorMessage}
+                onRetry={
+                  message.status === "failed" && onRetry
+                    ? () => onRetry(message.id)
+                    : undefined
+                }
               />
             </div>
           );
-        }
-
-        const text = typeof message.content === "string"
-          ? message.content
-          : getSafeContent(message.content);
-
-        return (
-          <div key={message.id ?? `user-${index}`} data-role="user">
-            <UserBubble
-              text={typeof text === "string" ? text : ""}
-              showTimestamp={showTs}
-              timestamp={cur}
-            />
-          </div>
-        );
         })}
+
+        {isGenerating ? (
+          <div data-role="thinking" className="flex justify-start">
+            <ThinkingIndicator />
+          </div>
+        ) : null}
       </div>
     </>
   );
