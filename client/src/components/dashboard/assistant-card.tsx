@@ -4,7 +4,14 @@
  * AssistantCard
  * --------------------------------------------------------------------
  * Replaces the legacy assistant tile. Token-driven, with a gradient
- * avatar, status badge, inline KPI row, and a 7-day confidence sparkline.
+ * avatar, status badge, and an inline KPI row that shows REAL ingestion
+ * metrics (pages crawled, chunks indexed) plus any optional chat KPIs the
+ * parent passes in from analytics fetches.
+ *
+ * Governance-first: we never fabricate values to make the card look more
+ * impressive. If the parent hasn't fetched per-assistant chat stats yet,
+ * we show ingestion stats and a "no chats yet" hint — never a hashed-id
+ * stub.
  * --------------------------------------------------------------------
  */
 import * as React from "react";
@@ -12,6 +19,8 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Activity,
   ChevronRight,
+  Database,
+  FileText,
   Gauge,
   MessageSquare,
   MoreHorizontal,
@@ -30,11 +39,16 @@ export interface AssistantCardData {
   template: string;
   status: "creating" | "ingesting" | "ready" | "error";
   totalPagesCrawled?: string;
-  /** Optional precomputed KPIs — fall back to deterministic stub values. */
+  totalChunksIndexed?: string;
+  /**
+   * Optional per-assistant chat KPIs. Only rendered when supplied by the
+   * caller from a real analytics fetch. We never synthesize these — an
+   * absent value means "no chats yet" or "not loaded", not "pretend".
+   */
   chatCount?: number;
   answerRatePct?: number;
   avgLatencyMs?: number;
-  /** Last-7-day confidence series, 0..1 each. */
+  /** Last-7-day confidence series, 0..1 each. Optional, real only. */
   confidenceSeries?: number[];
 }
 
@@ -43,43 +57,6 @@ interface AssistantCardProps {
   onSelect: () => void;
   onSettings: () => void;
   onDelete: () => void;
-}
-
-/* Deterministic stub KPI values from the assistant id when none provided.
- * Pure-function so SSR/CSR match. */
-function hashSeed(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i += 1) {
-    h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  }
-  return h || 1;
-}
-
-function rng(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 0xffffffff;
-  };
-}
-
-function deriveStubs(id: string): {
-  chats: number;
-  answerRate: number;
-  latencyMs: number;
-  series: number[];
-} {
-  const r = rng(hashSeed(id));
-  const chats = Math.floor(60 + r() * 1000);
-  const answerRate = 0.78 + r() * 0.2;
-  const latencyMs = Math.floor(380 + r() * 720);
-  const series: number[] = [];
-  let v = 0.6 + r() * 0.3;
-  for (let i = 0; i < 7; i += 1) {
-    v = Math.max(0.4, Math.min(0.99, v + (r() - 0.5) * 0.12));
-    series.push(v);
-  }
-  return { chats, answerRate, latencyMs, series };
 }
 
 const TEMPLATE_AVATAR_LABEL: Record<string, string> = {
@@ -123,13 +100,23 @@ export const AssistantCard = React.memo(function AssistantCard({
   onSettings,
   onDelete,
 }: AssistantCardProps) {
-  const stub = React.useMemo(() => deriveStubs(assistant.id), [assistant.id]);
-  const chats = assistant.chatCount ?? stub.chats;
-  const answerRate = assistant.answerRatePct ?? stub.answerRate;
-  const latency = assistant.avgLatencyMs ?? stub.latencyMs;
-  const series = assistant.confidenceSeries ?? stub.series;
+  // We only render KPIs that we actually have. No hashed-id stubs.
+  const chats = assistant.chatCount;
+  const answerRate = assistant.answerRatePct;
+  const latency = assistant.avgLatencyMs;
+  const series = assistant.confidenceSeries;
+  const hasChatKpis =
+    typeof chats === "number" ||
+    typeof answerRate === "number" ||
+    typeof latency === "number";
+  const hasSeries = Array.isArray(series) && series.length >= 2;
   const status = statusToBadge(assistant.status);
   const isReady = assistant.status === "ready";
+
+  // Real ingestion stats from the assistant record (always present, even
+  // when chat analytics haven't loaded yet).
+  const pagesNum = Number.parseInt(assistant.totalPagesCrawled ?? "0", 10) || 0;
+  const chunksNum = Number.parseInt(assistant.totalChunksIndexed ?? "0", 10) || 0;
 
   const initials =
     TEMPLATE_AVATAR_LABEL[assistant.template] ??
@@ -265,44 +252,95 @@ export const AssistantCard = React.memo(function AssistantCard({
           `Governed assistant trained on ${assistant.template} content.`}
       </p>
 
-      {/* KPI row */}
-      <div className="relative mt-4 grid grid-cols-3 gap-2">
-        <Stat icon={MessageSquare} label="Chats" value={formatChats(chats)} />
-        <Stat
-          icon={Gauge}
-          label="Answer rate"
-          value={`${Math.round(answerRate * 100)}%`}
-        />
-        <Stat icon={Activity} label="Latency" value={formatLatency(latency)} />
-      </div>
-
-      {/* Sparkline */}
-      <div className="relative mt-4 flex items-end justify-between gap-3">
-        <div className="flex-1">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
-            Confidence · 7d
-          </div>
-          <Sparkline
-            data={series}
-            tone="trust"
-            width={220}
-            height={36}
-            className="mt-1 w-full"
-            ariaLabel={`Confidence trend over the last 7 days for ${assistant.name}`}
+      {/* KPI row — when chat analytics are available, show them; otherwise
+          fall back to the real ingestion metrics from the assistant record. */}
+      {hasChatKpis ? (
+        <div className="relative mt-4 grid grid-cols-3 gap-2">
+          <Stat
+            icon={MessageSquare}
+            label="Chats"
+            value={typeof chats === "number" ? formatChats(chats) : "—"}
+          />
+          <Stat
+            icon={Gauge}
+            label="Answer rate"
+            value={
+              typeof answerRate === "number"
+                ? `${Math.round(answerRate * 100)}%`
+                : "—"
+            }
+          />
+          <Stat
+            icon={Activity}
+            label="Latency"
+            value={typeof latency === "number" ? formatLatency(latency) : "—"}
           />
         </div>
-        {isReady && (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 text-xs font-medium",
-              "text-[var(--color-brand)] opacity-0 transition-opacity",
-              "group-hover:opacity-100"
-            )}
-          >
-            Open <ChevronRight className="h-3 w-3" />
-          </span>
-        )}
-      </div>
+      ) : (
+        <div className="relative mt-4 grid grid-cols-2 gap-2">
+          <Stat icon={FileText} label="Pages" value={pagesNum.toLocaleString()} />
+          <Stat
+            icon={Database}
+            label="Chunks"
+            value={chunksNum.toLocaleString()}
+          />
+        </div>
+      )}
+
+      {/* Confidence sparkline — only when a real 7-day series is supplied. */}
+      {hasSeries ? (
+        <div className="relative mt-4 flex items-end justify-between gap-3">
+          <div className="flex-1">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+              Confidence · 7d
+            </div>
+            <Sparkline
+              data={series as number[]}
+              tone="trust"
+              width={220}
+              height={36}
+              className="mt-1 w-full"
+              ariaLabel={`Confidence trend over the last 7 days for ${assistant.name}`}
+            />
+          </div>
+          {isReady && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 text-xs font-medium",
+                "text-[var(--color-brand)] opacity-0 transition-opacity",
+                "group-hover:opacity-100"
+              )}
+            >
+              Open <ChevronRight className="h-3 w-3" />
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="relative mt-4 flex items-end justify-between gap-3">
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+            {isReady && !hasChatKpis
+              ? "No chats yet"
+              : assistant.status === "ingesting"
+              ? "Indexing content…"
+              : assistant.status === "creating"
+              ? "Setting up…"
+              : assistant.status === "error"
+              ? "Setup failed"
+              : "Ready"}
+          </p>
+          {isReady && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 text-xs font-medium",
+                "text-[var(--color-brand)] opacity-0 transition-opacity",
+                "group-hover:opacity-100"
+              )}
+            >
+              Open <ChevronRight className="h-3 w-3" />
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 });

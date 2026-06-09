@@ -116,112 +116,95 @@ export function normalizeAssistant(record: AssistantApiRecord): Assistant {
 }
 
 /* =============================================================== */
-/* Seed / mock data — used when the API isn't reachable             */
+/* Real KPI assembly — from /api/v1/analytics/system-stats and      */
+/* /api/v1/analytics/usage. No synthetic numbers, no random walks.   */
 /* =============================================================== */
 
-const SEED_ASSISTANTS: Assistant[] = [
-  {
-    id: "seed-1",
-    name: "Support Desk",
-    description: "Answers customer support questions from the help center.",
-    sourceType: "website",
-    siteUrl: "https://example.com",
-    template: "support",
-    status: "ready",
-    totalPagesCrawled: "147",
-    totalChunksIndexed: "892",
-    allowedIntents: ["support", "documentation", "faq"],
-    governanceRules: {
-      require_context: true,
-      tenant_isolation: true,
-      attribution_required: true,
-    },
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "seed-2",
-    name: "Sales Concierge",
-    description: "Guides prospective customers through pricing and packaging.",
-    sourceType: "website",
-    siteUrl: "https://example.com",
-    template: "sales",
-    status: "ready",
-    totalPagesCrawled: "62",
-    totalChunksIndexed: "318",
-    allowedIntents: ["pricing", "demo", "contact"],
-    governanceRules: { tenant_isolation: true, attribution_required: true },
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "seed-3",
-    name: "Onboarding Coach",
-    description: "Walks new users through workspace setup and first assistant.",
-    sourceType: "wordpress",
-    siteUrl: "https://docs.example.com",
-    template: "customer",
-    status: "ingesting",
-    totalPagesCrawled: "21",
-    totalChunksIndexed: "84",
-    allowedIntents: ["onboarding", "setup"],
-    governanceRules: { tenant_isolation: true, policy_quote_only: true },
-    createdAt: new Date().toISOString(),
-  },
-];
+interface SystemStatsResponse {
+  total_assistants?: number;
+  active_assistants?: number;
+  total_projects?: number;
+  total_content_chunks?: number;
+  total_chat_sessions?: number;
+  total_messages?: number;
+  answer_rate?: number;
+  avg_processing_time?: number;
+}
 
-/* =============================================================== */
-/* KPI synthesis — deterministic but feels real                      */
-/* =============================================================== */
+interface UsageDailyPoint {
+  date: string;
+  messages: number;
+}
 
-function buildKpiData(assistants: Assistant[]): KpiTileData {
-  const ready = assistants.filter((a) => a.status === "ready").length;
-  const seedTotal = Math.max(1, ready);
+interface UsageRatePoint {
+  date: string;
+  answer_rate: number; // backend returns 0..100
+  total_messages: number;
+}
 
-  /* Deterministic 30-point series, gently trending upward. */
-  const totalChatsSeries: number[] = [];
-  const answerRateSeries: number[] = [];
-  const avgProcessingSeries: number[] = [];
-  const refusalsSeries: number[] = [];
+interface UsageResponse {
+  chat_volume?: UsageDailyPoint[];
+  answer_rates?: UsageRatePoint[];
+}
 
-  let chats = 18 + seedTotal * 8;
-  let answer = 0.86;
-  let latency = 1300;
-  let refusal = 4;
-  for (let i = 0; i < 30; i += 1) {
-    chats += Math.sin(i / 3) * 4 + 2;
-    answer += Math.sin(i / 4) * 0.005 + 0.001;
-    latency += Math.cos(i / 5) * 18 - 1.5;
-    refusal += Math.sin(i / 2) * 0.4 - 0.05;
+/**
+ * Build the KpiTileData shape from real backend responses. Returns null
+ * when there's no meaningful data yet (zero messages, zero sessions) so
+ * the dashboard can hide the row instead of showing a wall of zeros.
+ */
+function buildKpiDataFromBackend(
+  stats: SystemStatsResponse,
+  usage: UsageResponse | null
+): KpiTileData | null {
+  const totalMessages = stats.total_messages ?? 0;
+  const totalSessions = stats.total_chat_sessions ?? 0;
 
-    totalChatsSeries.push(Math.max(0, chats));
-    answerRateSeries.push(Math.max(0.7, Math.min(1, answer)));
-    avgProcessingSeries.push(Math.max(700, latency));
-    refusalsSeries.push(Math.max(0, refusal));
+  // No real activity yet — let the caller hide the KPI row entirely
+  // rather than render four "0" tiles with empty sparklines.
+  if (totalMessages === 0 && totalSessions === 0) {
+    return null;
   }
 
-  const totalChats = Math.round(totalChatsSeries.reduce((s, v) => s + v, 0));
-  const last7 = totalChatsSeries.slice(-7).reduce((s, v) => s + v, 0);
-  const prev7 = totalChatsSeries.slice(-14, -7).reduce((s, v) => s + v, 0) || 1;
+  // Chat volume series (real, one point per day). Empty array is fine —
+  // the Sparkline component handles <2 points by rendering nothing.
+  const totalChatsSeries =
+    usage?.chat_volume?.map((p) => p.messages ?? 0) ?? [];
+
+  // Answer rate series, normalised to 0..1 to match the existing KPI tile
+  // contract (the tile multiplies by 100 itself).
+  const answerRateSeries =
+    usage?.answer_rates?.map((p) =>
+      Math.max(0, Math.min(1, (p.answer_rate ?? 0) / 100))
+    ) ?? [];
+
+  // Compute a 7d-vs-prior-7d delta from real data only if we have at
+  // least 14 days of points. Otherwise return 0 and let the tile show
+  // "+0%" / "—" rather than fabricating a comparison.
+  let totalChatsDelta = 0;
+  if (totalChatsSeries.length >= 14) {
+    const last7 = totalChatsSeries.slice(-7).reduce((s, v) => s + v, 0);
+    const prev7 = totalChatsSeries.slice(-14, -7).reduce((s, v) => s + v, 0);
+    totalChatsDelta = prev7 > 0 ? (last7 - prev7) / prev7 : 0;
+  }
 
   return {
-    totalChats,
+    totalChats: totalMessages,
     totalChatsSeries,
-    totalChatsDelta: (last7 - prev7) / prev7,
-    answerRate: answerRateSeries[answerRateSeries.length - 1],
+    totalChatsDelta,
+    answerRate: stats.answer_rate ?? 0,
     answerRateSeries,
-    answerRateDelta: 0.04,
-    avgProcessingMs: Math.round(
-      avgProcessingSeries[avgProcessingSeries.length - 1]
-    ),
-    avgProcessingSeries,
-    avgProcessingDelta: -0.08,
-    refusals: Math.round(refusalsSeries.reduce((s, v) => s + v, 0)),
-    refusalsSeries,
-    refusalsBreakdown: [
-      { rule: "Out-of-scope", count: Math.max(1, Math.round(refusal * 4)) },
-      { rule: "Tenant isolation", count: 3 },
-      { rule: "Citation missing", count: 2 },
-      { rule: "Policy quote-only", count: 1 },
-    ],
+    // No historical comparison from the backend — show 0 (the tile renders
+    // "+0%") rather than inventing a number.
+    answerRateDelta: 0,
+    avgProcessingMs: Math.round(stats.avg_processing_time ?? 0),
+    // We don't have a per-day latency series from the backend yet.
+    avgProcessingSeries: [],
+    avgProcessingDelta: 0,
+    // Refusals aren't yet exposed via system-stats; show 0 with no
+    // fabricated per-rule breakdown.
+    refusals: 0,
+    refusalsSeries: [],
+    refusalsBreakdown: [],
   };
 }
 
@@ -294,8 +277,8 @@ function FetchErrorNotice({ onRetry, onDismiss, isRetrying }: FetchErrorNoticePr
           Couldn&rsquo;t reach the assistants service
         </p>
         <p className="text-xs text-[var(--color-text-secondary)]">
-          Showing recent sample data. Your real workspace will appear once the
-          connection recovers.
+          Your workspace will appear once the connection recovers. Retry, or
+          create an assistant once the service is back.
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
@@ -328,11 +311,18 @@ export function DashboardScreen() {
 
   const [assistants, setAssistants] = useState<Assistant[]>([]);
   const [loading, setLoading] = useState(true);
-  // `fetchError` is non-null when the most recent fetch failed AND we fell
-  // back to seed data. Cleared on a successful retry or user dismiss.
+  // `fetchError` is non-null when the most recent fetch failed. Cleared on
+  // a successful retry or user dismiss. We do NOT substitute fake data —
+  // governance-first means an honest empty/error state instead.
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const fetchingRef = useRef(false);
+
+  // Real KPI data, fetched from /api/v1/analytics endpoints. null until
+  // the first fetch resolves; KpiTileData|null after that. We hide the
+  // KPI row when this stays null or when the backend reports zero
+  // activity (see buildKpiDataFromBackend).
+  const [kpiData, setKpiData] = useState<KpiTileData | null>(null);
 
   /* -------------------------------------------------------------
    * Fetch assistants once `user` is hydrated, then poll while any
@@ -365,23 +355,53 @@ export function DashboardScreen() {
     }
     fetchingRef.current = true;
     try {
-      const response = await apiGet("/api/assistants", user.accessToken);
-      if (response.ok) {
-        const data = await response.json();
+      // Fetch assistants + system stats + 30d usage in parallel. Each
+      // result is treated independently — a failure in one doesn't taint
+      // the others. We never substitute synthetic data on failure.
+      const [assistantsRes, statsRes, usageRes] = await Promise.all([
+        apiGet("/api/assistants", user.accessToken),
+        apiGet("/api/v1/analytics/system-stats", user.accessToken).catch(
+          () => null as Response | null
+        ),
+        apiGet("/api/v1/analytics/usage?days=30", user.accessToken).catch(
+          () => null as Response | null
+        ),
+      ]);
+
+      if (assistantsRes.ok) {
+        const data = await assistantsRes.json();
         const list = Array.isArray(data.assistants)
           ? data.assistants.map(normalizeAssistant)
           : [];
         setAssistants(list);
-        // Successful fetch clears any prior error banner.
         setFetchError(null);
       } else {
-        setAssistants(SEED_ASSISTANTS);
-        setFetchError(`Service returned ${response.status}`);
+        // Don't pretend — leave the list as it was (likely empty on first
+        // load) and surface the error so the user can retry.
+        setFetchError(`Service returned ${assistantsRes.status}`);
+      }
+
+      // KPI assembly is best-effort: if either analytics call fails, we
+      // simply don't show the KPI row. No fallback to fake numbers.
+      let stats: SystemStatsResponse | null = null;
+      let usage: UsageResponse | null = null;
+      if (statsRes && statsRes.ok) {
+        stats = await statsRes.json().catch(() => null);
+      }
+      if (usageRes && usageRes.ok) {
+        usage = await usageRes.json().catch(() => null);
+      }
+      if (stats) {
+        setKpiData(buildKpiDataFromBackend(stats, usage));
+      } else {
+        setKpiData(null);
       }
     } catch (err) {
-      console.error("Failed to fetch assistants:", err);
-      setAssistants(SEED_ASSISTANTS);
+      console.error("Failed to fetch dashboard data:", err);
+      // Do not substitute seed/fake assistants. The dashboard renders an
+      // honest empty state with a retry CTA via FetchErrorNotice.
       setFetchError(err instanceof Error ? err.message : "Network error");
+      setKpiData(null);
     } finally {
       setLoading(false);
       setIsRetrying(false);
@@ -426,11 +446,10 @@ export function DashboardScreen() {
     return seg.charAt(0).toUpperCase() + seg.slice(1);
   }, [user]);
 
-  const kpiData = useMemo(() => buildKpiData(assistants), [assistants]);
-
-  // Show KPIs only when there's real data — never fake "94%" numbers for a
-  // trust-first product. New users see the onboarding checklist instead.
-  const hasRealData = assistants.length > 0 && assistants !== SEED_ASSISTANTS;
+  // The dashboard treats "has real data" as "the workspace owns at least
+  // one assistant". KPI rendering is independent — it requires both an
+  // assistant AND non-zero usage from the backend (handled in kpiData).
+  const hasRealData = assistants.length > 0;
   const hasReady = assistants.some((a) => a.status === "ready");
 
   /* -------------------------------------------------------------
@@ -510,8 +529,10 @@ export function DashboardScreen() {
         onCreate={handleCreate}
       />
 
-      {/* Only show KPIs when there's real, non-seeded data behind them. */}
-      {hasRealData ? <KpiTiles data={kpiData} /> : null}
+      {/* KPI tiles render only when both the workspace has assistants AND
+          the analytics backend reported non-zero activity. We never show
+          synthesized "94%"-style numbers. */}
+      {hasRealData && kpiData ? <KpiTiles data={kpiData} /> : null}
     </div>
   );
 }
