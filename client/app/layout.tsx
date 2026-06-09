@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { TamboProviderWrapper } from "@/components/tambo/tambo-provider-wrapper";
 import { AuthProvider } from "@/contexts/auth-context";
 
 const geistSans = Geist({
@@ -30,11 +29,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <TamboProviderWrapper>
-            {children}
-          </TamboProviderWrapper>
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
