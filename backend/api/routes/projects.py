@@ -27,6 +27,7 @@ from backend.models.ingestion_tracking import IngestionURL, URLStatus
 from backend.models.tenant import Tenant
 from backend.models.user import User
 from backend.ingestion.web_scraper import WebScraperService, ScrapingConfig
+from backend.ingestion.wordpress_client import WordPressClient, WordPressConfig
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -73,6 +74,7 @@ class WebsiteScrapeRequest(BaseModel):
     timeout: Optional[int] = 30
     follow_external_links: Optional[bool] = False
     excluded_patterns: Optional[List[str]] = None
+    source_type: Optional[str] = "website"
 
 
 class ScrapedUrlItem(BaseModel):
@@ -118,6 +120,45 @@ async def scrape_website_master(
             except Exception:
                 return
 
+        # Resolve source_type from request, defaulting to WEBSITE for unknown / missing values.
+        # This keeps the existing website behavior intact when no source_type is sent.
+        requested_source = (request.source_type or "website").lower()
+        try:
+            resolved_source_type = SourceType(requested_source)
+        except ValueError:
+            resolved_source_type = SourceType.WEBSITE
+
+        def wordpress_progress_adapter(info: Dict[str, Any]):
+            """Adapt WordPressClient progress events to the shape consumed by the SSE client.
+
+            WordPressClient emits ``{event_type: "wordpress_fetch", endpoint, page, items_fetched}``.
+            The frontend understands ``url_discovered`` / ``url_completed`` with
+            ``total_discovered`` / ``completed`` / ``pending``. We translate each WP
+            batch into a synthetic url_completed event so the discovery UI shows
+            forward progress; the final IngestionURL rows still come from ``fetch_all``'s
+            returned ScrapedPage list, identical to the website path.
+            """
+            try:
+                if info.get("event_type") == "wordpress_fetch":
+                    items_fetched = int(info.get("items_fetched") or 0)
+                    endpoint = info.get("endpoint") or "wordpress"
+                    page_num = int(info.get("page") or 1)
+                    synthetic_url = f"wordpress://{endpoint}/page/{page_num}"
+                    with progress_lock:
+                        progress_list.append({
+                            "event_type": "url_completed",
+                            "url": synthetic_url,
+                            "total_discovered": items_fetched,
+                            "completed": items_fetched,
+                            "pending": 0,
+                            "status": "success",
+                        })
+                else:
+                    with progress_lock:
+                        progress_list.append(info)
+            except Exception:
+                return
+
         async def run_scrape():
             try:
                 tenant_uuid = current_tenant.id
@@ -147,7 +188,7 @@ async def scrape_website_master(
                     tenant_id=tenant_uuid,
                     name=request.name,
                     description=request.description,
-                    source_type=SourceType.WEBSITE,
+                    source_type=resolved_source_type,
                     site_url=str(request.site_url),
                     template=request.template,
                     status=AssistantStatus.CREATING,
@@ -174,22 +215,36 @@ async def scrape_website_master(
                     "job_id": str(job.id),
                 })
 
-                scraper = WebScraperService()
-                config = ScrapingConfig(
-                    max_pages=int(request.max_pages or 100),
-                    max_depth=int(request.max_depth or 3),
-                    delay_between_requests=float(request.delay_between_requests or 1.0),
-                    timeout=int(request.timeout or 30),
-                    follow_external_links=bool(request.follow_external_links or False),
-                    excluded_patterns=request.excluded_patterns or [],
-                )
+                if resolved_source_type == SourceType.WORDPRESS:
+                    wp_config = WordPressConfig(
+                        per_page=100,
+                        max_pages=int(request.max_pages or 100),
+                        request_timeout=int(request.timeout or 30),
+                        delay_between_requests=float(request.delay_between_requests or 1.0),
+                    )
+                    wp_client = WordPressClient(
+                        site_url=str(request.site_url),
+                        config=wp_config,
+                        progress_callback=wordpress_progress_adapter,
+                    )
+                    pages = await wp_client.fetch_all()
+                else:
+                    scraper = WebScraperService()
+                    config = ScrapingConfig(
+                        max_pages=int(request.max_pages or 100),
+                        max_depth=int(request.max_depth or 3),
+                        delay_between_requests=float(request.delay_between_requests or 1.0),
+                        timeout=int(request.timeout or 30),
+                        follow_external_links=bool(request.follow_external_links or False),
+                        excluded_patterns=request.excluded_patterns or [],
+                    )
 
-                pages = await scraper.scrape_website_parallel(
-                    start_url=str(request.site_url),
-                    config=config,
-                    max_workers=5,
-                    progress_callback=progress_callback,
-                )
+                    pages = await scraper.scrape_website_parallel(
+                        start_url=str(request.site_url),
+                        config=config,
+                        max_workers=5,
+                        progress_callback=progress_callback,
+                    )
 
                 if not pages:
                     raise Exception("No pages were successfully scraped")

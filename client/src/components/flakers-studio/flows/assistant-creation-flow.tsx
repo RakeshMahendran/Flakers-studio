@@ -251,6 +251,7 @@ export function AssistantCreationFlow({
           description: formData.description,
           template: formData.template,
           site_url: formData.siteUrl,
+          source_type: formData.sourceType,
           max_pages: 100,
           max_depth: 3,
           delay_between_requests: 1.0,
@@ -720,7 +721,15 @@ export function AssistantCreationFlow({
                     </div>
                   </Card>
 
-                  <Card className="opacity-50 cursor-not-allowed">
+                  <Card
+                    className={cn(
+                      "transition-all duration-200",
+                      formData.sourceType === "wordpress"
+                        ? "ring-1 ring-[var(--color-brand)] border-[var(--color-brand-border)]"
+                        : ""
+                    )}
+                    onClick={() => setFormData({ ...formData, sourceType: "wordpress" })}
+                  >
                     <div className="text-center">
                       <div className="w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 bg-[var(--color-brand-soft)] border border-[var(--color-brand-border)]">
                         <Edit3 className="w-8 h-8 text-[var(--color-brand)]" />
@@ -730,9 +739,8 @@ export function AssistantCreationFlow({
                         Connect to WordPress via REST API for posts, pages, and custom content types
                       </p>
                       <div className="flex flex-wrap gap-2 justify-center">
-                        <Badge variant="caution">Coming soon</Badge>
                         <Badge variant="brand">REST API</Badge>
-                        <Badge variant="brand">Real-time Sync</Badge>
+                        <Badge variant="brand">Dynamic HTML fallback</Badge>
                       </div>
                     </div>
                   </Card>
