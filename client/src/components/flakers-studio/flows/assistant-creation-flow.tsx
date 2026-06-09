@@ -268,7 +268,18 @@ export function AssistantCreationFlow({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to discover content");
+        // Surface the backend's actual error instead of a generic string.
+        // Backend returns JSON for non-2xx (not SSE), so try parsing.
+        let detail: string | undefined;
+        try {
+          const body = await response.json();
+          detail = body?.detail || body?.error || body?.message;
+        } catch {
+          detail = await response.text().catch(() => undefined);
+        }
+        throw new Error(
+          `Failed to discover content (${response.status})${detail ? `: ${detail}` : ""}`
+        );
       }
 
       const reader = response.body?.getReader();
