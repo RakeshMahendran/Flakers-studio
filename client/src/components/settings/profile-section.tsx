@@ -126,8 +126,18 @@ export function ProfileSection({ email, fullName, userId, token, onSaved }: Prof
             onChange={(e) => setEmailValue(e.target.value)}
           />
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--color-text-secondary)]">User ID</label>
-            <div className="flex h-10 items-center rounded-md border border-[var(--input-border)] bg-[var(--color-surface-sunken)] px-3 font-mono text-xs text-[var(--color-text-tertiary)]">
+            <span
+              id="settings-user-id-label"
+              className="text-sm font-medium text-[var(--color-text-secondary)]"
+            >
+              User ID
+            </span>
+            <div
+              className="flex h-10 items-center rounded-md border border-[var(--input-border)] bg-[var(--color-surface-sunken)] px-3 font-mono text-xs text-[var(--color-text-tertiary)]"
+              role="textbox"
+              aria-readonly="true"
+              aria-labelledby="settings-user-id-label"
+            >
               {userId || "—"}
             </div>
           </div>
@@ -188,6 +198,9 @@ export function ProfileSection({ email, fullName, userId, token, onSaved }: Prof
           </button>
           {passwordOpen ? (
             <div className="flex flex-col gap-3 pt-4">
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                Choose a new password of at least 8 characters. You&rsquo;ll stay signed in on this device.
+              </p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Input
                   label="Current password"

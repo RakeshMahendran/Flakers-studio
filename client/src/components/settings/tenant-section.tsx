@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Building2, Check, Copy, Loader2, Save, Users } from "lucide-react";
-import { Badge, Button, Card, Input, Skeleton } from "@/components/ui/primitives";
+import { AlertTriangle, Building2, Check, Copy, RefreshCw, Save, Users } from "lucide-react";
+import { Badge, Button, Input, Skeleton } from "@/components/ui/primitives";
 import { SectionCard } from "./section-card";
 import { apiGet, apiPut } from "@/lib/api-client";
 
@@ -68,29 +68,35 @@ export function TenantSection({
     setName(tenantName);
   }, [tenantName]);
 
+  const loadMembers = React.useCallback(async () => {
+    setLoadingMembers(true);
+    setMembersError(null);
+    try {
+      const res = await apiGet("/api/auth/tenant/members", token);
+      if (res.ok) {
+        const data = await res.json();
+        setMembers(Array.isArray(data.members) ? data.members : []);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setMembersError(err.detail || `Failed to load members (${res.status})`);
+      }
+    } catch (e) {
+      setMembersError(e instanceof Error ? e.message : "Failed to load members");
+    } finally {
+      setLoadingMembers(false);
+    }
+  }, [token]);
+
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const res = await apiGet("/api/auth/tenant/members", token);
-        if (cancelled) return;
-        if (res.ok) {
-          const data = await res.json();
-          setMembers(Array.isArray(data.members) ? data.members : []);
-        } else {
-          const err = await res.json().catch(() => ({}));
-          setMembersError(err.detail || `Failed to load members (${res.status})`);
-        }
-      } catch (e) {
-        if (!cancelled) setMembersError(e instanceof Error ? e.message : "Failed to load members");
-      } finally {
-        if (!cancelled) setLoadingMembers(false);
-      }
+      if (cancelled) return;
+      await loadMembers();
     })();
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [loadMembers]);
 
   const handleCopy = async () => {
     try {
@@ -137,9 +143,19 @@ export function TenantSection({
       <div className="flex flex-col gap-6">
         {/* Tenant ID */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-[var(--color-text-secondary)]">Tenant ID</label>
+          <span
+            id="settings-tenant-id-label"
+            className="text-sm font-medium text-[var(--color-text-secondary)]"
+          >
+            Tenant ID
+          </span>
           <div className="flex items-center gap-2">
-            <div className="flex h-10 flex-1 items-center rounded-md border border-[var(--input-border)] bg-[var(--color-surface-sunken)] px-3 font-mono text-xs text-[var(--color-text-tertiary)]">
+            <div
+              className="flex h-10 flex-1 items-center rounded-md border border-[var(--input-border)] bg-[var(--color-surface-sunken)] px-3 font-mono text-xs text-[var(--color-text-tertiary)]"
+              role="textbox"
+              aria-readonly="true"
+              aria-labelledby="settings-tenant-id-label"
+            >
               {tenantId || "—"}
             </div>
             <Button
@@ -212,14 +228,47 @@ export function TenantSection({
 
           {loadingMembers ? (
             <>
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
             </>
           ) : membersError ? (
-            <p className="text-sm text-[var(--color-refuse)]">{membersError}</p>
+            <div
+              className="flex items-start gap-3 rounded-md border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)]/60 p-3"
+              role="alert"
+            >
+              <AlertTriangle
+                className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-refuse-strong)]"
+                aria-hidden
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--color-refuse-strong)]">
+                  Couldn&rsquo;t load members
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{membersError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadMembers}
+                  className="mt-2"
+                  type="button"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Try again
+                </Button>
+              </div>
+            </div>
           ) : members.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[var(--color-border-subtle)] bg-[var(--color-surface-sunken)] p-4 text-center text-sm text-[var(--color-text-secondary)]">
-              No members found.
+            <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-[var(--color-border-subtle)] bg-[var(--color-surface-sunken)] p-6 text-center">
+              <span
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)]"
+                aria-hidden
+              >
+                <Users className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-medium text-[var(--color-text-primary)]">No members yet</p>
+              <p className="max-w-xs text-xs text-[var(--color-text-secondary)]">
+                You&rsquo;re the only person in this organization. Invites will appear here once teammates accept.
+              </p>
             </div>
           ) : (
             <ul className="flex flex-col gap-2">

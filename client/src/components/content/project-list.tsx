@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Calendar, ChevronRight, FileText, Loader2, Trash2 } from "lucide-react";
+import { Calendar, ChevronRight, FileText, Loader2, SearchX, Trash2 } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui/primitives";
 import { cn } from "@/lib/design-system";
 
@@ -26,6 +26,13 @@ export interface ProjectListProps {
   onDelete: (project: ProjectRecord) => void;
   /** Project IDs whose delete request is in-flight. */
   deletingIds?: Set<string>;
+  /**
+   * When true, an empty `projects` array is treated as "filtered to nothing"
+   * rather than "no projects at all". Lets the empty state messaging adapt.
+   */
+  isFiltered?: boolean;
+  /** Optional reset callback rendered alongside the filtered-empty state. */
+  onClearFilters?: () => void;
 }
 
 function statusVariant(status: string): "trust" | "caution" | "refuse" | "neutral" {
@@ -59,11 +66,37 @@ export function ProjectList({
   onSelect,
   onDelete,
   deletingIds,
+  isFiltered = false,
+  onClearFilters,
 }: ProjectListProps) {
   if (projects.length === 0) {
+    if (isFiltered) {
+      return (
+        <Card className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+          <div
+            className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-surface-sunken)] text-[var(--color-text-tertiary)]"
+            aria-hidden
+          >
+            <SearchX className="h-6 w-6" />
+          </div>
+          <h3 className="text-base font-medium text-[var(--color-text-primary)]">No matching projects</h3>
+          <p className="max-w-sm text-sm text-[var(--color-text-secondary)]">
+            Try a different search term or status filter.
+          </p>
+          {onClearFilters ? (
+            <Button variant="outline" size="sm" onClick={onClearFilters} className="mt-1">
+              Clear filters
+            </Button>
+          ) : null}
+        </Card>
+      );
+    }
     return (
       <Card className="flex flex-col items-center justify-center gap-3 p-12 text-center">
-        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-surface-sunken)] text-[var(--color-text-tertiary)]">
+        <div
+          className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-surface-sunken)] text-[var(--color-text-tertiary)]"
+          aria-hidden
+        >
           <FileText className="h-6 w-6" />
         </div>
         <h3 className="text-base font-medium text-[var(--color-text-primary)]">No content projects yet</h3>
@@ -129,9 +162,9 @@ export function ProjectList({
                   </span>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-text-tertiary)] transition-colors group-hover:text-[var(--color-brand)]">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-text-tertiary)] transition-colors group-hover:text-[var(--color-text-secondary)]">
                 <span className="hidden sm:inline">View</span>
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </span>
             </button>
             <Button

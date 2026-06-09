@@ -15,7 +15,8 @@
  * endpoint. Other endpoints are window-independent.
  */
 import * as React from "react";
-import { Download, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, BarChart3, Download, LogIn, RefreshCw } from "lucide-react";
 
 import { Button, Card, Skeleton } from "@/components/ui/primitives";
 import { useAuth } from "@/contexts/auth-context";
@@ -77,6 +78,7 @@ export function AnalyticsScreen() {
   const [loadingStats, setLoadingStats] = React.useState(true);
   const [loadingUsage, setLoadingUsage] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = React.useState<number | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
 
   // Clear assistant/recent palette context.
@@ -90,6 +92,7 @@ export function AnalyticsScreen() {
   const fetchStatic = React.useCallback(async () => {
     if (!user) return;
     setError(null);
+    setErrorStatus(null);
     try {
       const [statsRes, qualityRes, perfRes] = await Promise.all([
         apiGet("/api/v1/analytics/system-stats", user.accessToken),
@@ -101,6 +104,7 @@ export function AnalyticsScreen() {
         setStats(await statsRes.json());
       } else {
         const err = await statsRes.json().catch(() => ({}));
+        setErrorStatus(statsRes.status);
         setError(err.detail || `Failed to load system stats (${statsRes.status})`);
       }
       if (qualityRes.ok) setQuality(await qualityRes.json());
@@ -123,6 +127,7 @@ export function AnalyticsScreen() {
           setUsage(await res.json());
         } else {
           const err = await res.json().catch(() => ({}));
+          setErrorStatus(res.status);
           setError(err.detail || `Failed to load usage analytics (${res.status})`);
         }
       } catch (e) {
@@ -193,9 +198,12 @@ export function AnalyticsScreen() {
       </header>
 
       {error ? (
-        <Card className="border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-4">
-          <p className="text-sm text-[var(--color-refuse-strong)]">{error}</p>
-        </Card>
+        <AnalyticsErrorCard
+          message={error}
+          status={errorStatus}
+          onRetry={handleRefresh}
+          retrying={refreshing}
+        />
       ) : null}
 
       {/* Summary tiles */}
@@ -207,6 +215,11 @@ export function AnalyticsScreen() {
         </div>
       ) : stats ? (
         <AnalyticsSummaryTiles stats={stats} />
+      ) : !error ? (
+        <AnalyticsEmptyCard
+          title="No analytics yet"
+          description="Create an assistant and start a conversation to populate usage stats."
+        />
       ) : null}
 
       {/* Usage chart */}
@@ -248,5 +261,92 @@ export function AnalyticsScreen() {
         <RecentJobsTable jobs={performance.recent_jobs} />
       ) : null}
     </div>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+
+interface AnalyticsErrorCardProps {
+  message: string;
+  status: number | null;
+  onRetry: () => void;
+  retrying: boolean;
+}
+
+/**
+ * Inline error surface for analytics fetches. Specialises on 401 (the
+ * "Authorization header required" case the user reported) by replacing the
+ * raw detail with a friendly sign-in link.
+ */
+function AnalyticsErrorCard({ message, status, onRetry, retrying }: AnalyticsErrorCardProps) {
+  const isAuth =
+    status === 401 ||
+    status === 403 ||
+    /authorization header required/i.test(message) ||
+    /not authenticated/i.test(message);
+
+  return (
+    <Card
+      className="border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)]/60 p-4"
+      role="alert"
+      aria-live="polite"
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--color-refuse-soft)] text-[var(--color-refuse-strong)]"
+          aria-hidden
+        >
+          <AlertTriangle className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-[var(--color-refuse-strong)]">
+            {isAuth ? "Your session has expired" : "Couldn't load analytics"}
+          </p>
+          <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
+            {isAuth
+              ? "Sign in again to view your analytics dashboard."
+              : message}
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            {isAuth ? (
+              <Button variant="primary" size="sm" asChild>
+                <Link href="/login">
+                  <LogIn className="h-4 w-4" />
+                  Sign in again
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
+                <RefreshCw className={retrying ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                Try again
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+interface AnalyticsEmptyCardProps {
+  title: string;
+  description: string;
+}
+
+function AnalyticsEmptyCard({ title, description }: AnalyticsEmptyCardProps) {
+  return (
+    <Card className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+      <span
+        className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-surface-sunken)] text-[var(--color-text-tertiary)]"
+        aria-hidden
+      >
+        <BarChart3 className="h-6 w-6" />
+      </span>
+      <h3 className="text-base font-medium text-[var(--color-text-primary)]">{title}</h3>
+      <p className="max-w-sm text-sm text-[var(--color-text-secondary)]">{description}</p>
+      <Button variant="outline" size="sm" asChild className="mt-1">
+        <Link href="/assistant/create">Create your first assistant</Link>
+      </Button>
+    </Card>
   );
 }

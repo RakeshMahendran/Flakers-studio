@@ -255,7 +255,7 @@ export function ProjectDetailDrawer({
                     <a
                       key={a.id}
                       href={`/assistant/${a.id}/review`}
-                      className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 hover:shadow-[var(--elevation-1)]"
+                      className="flex items-center justify-between rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3 transition-[border-color,box-shadow] hover:border-[var(--color-border-default)] hover:shadow-[var(--elevation-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

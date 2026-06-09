@@ -15,7 +15,7 @@
  */
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, Plus, RefreshCw, Search, X } from "lucide-react";
 
 import { Button, Input, Skeleton, Card } from "@/components/ui/primitives";
 import { cn } from "@/lib/design-system";
@@ -296,8 +296,31 @@ export function ContentScreen() {
       </header>
 
       {error ? (
-        <Card className="border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-4">
-          <p className="text-sm text-[var(--color-refuse-strong)]">{error}</p>
+        <Card
+          className="border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)]/60 p-4"
+          role="alert"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--color-refuse-soft)] text-[var(--color-refuse-strong)]"
+              aria-hidden
+            >
+              <AlertTriangle className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-[var(--color-refuse-strong)]">
+                Couldn&rsquo;t load content
+              </p>
+              <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">{error}</p>
+              <div className="mt-3">
+                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+                  <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                  Try again
+                </Button>
+              </div>
+            </div>
+          </div>
         </Card>
       ) : null}
 
@@ -358,6 +381,11 @@ export function ContentScreen() {
         onSelect={handleSelectProject}
         onDelete={handleDeleteProject}
         deletingIds={deletingIds}
+        isFiltered={projects.length > 0 && (searchQuery.trim() !== "" || statusFilter !== "all")}
+        onClearFilters={() => {
+          setSearchQuery("");
+          setStatusFilter("all");
+        }}
       />
 
       <ProjectDetailDrawer

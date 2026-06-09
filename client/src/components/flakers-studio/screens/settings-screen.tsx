@@ -13,12 +13,12 @@
  * the left nav collapses to anchor pills that scroll horizontally.
  */
 import * as React from "react";
-import { AlertTriangle, Building2, User as UserIcon, Users } from "lucide-react";
+import { AlertTriangle, Building2, RefreshCw, User as UserIcon } from "lucide-react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { apiGet } from "@/lib/api-client";
 import { useAppShell } from "@/components/layout/app-shell";
-import { Skeleton } from "@/components/ui/primitives";
+import { Button, Card, Skeleton } from "@/components/ui/primitives";
 import { cn } from "@/lib/design-system";
 
 import { ProfileSection } from "@/components/settings/profile-section";
@@ -56,6 +56,7 @@ export function SettingsScreen() {
   const shell = useAppShell();
   const [me, setMe] = React.useState<MeResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const [activeSection, setActiveSection] = React.useState<NavSection["id"]>("profile");
 
   React.useEffect(() => {
@@ -69,13 +70,18 @@ export function SettingsScreen() {
       setLoading(false);
       return;
     }
+    setError(null);
     try {
       const res = await apiGet("/api/auth/me", user.accessToken);
       if (res.ok) {
         setMe((await res.json()) as MeResponse);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(err.detail || `Couldn't load your account (${res.status})`);
       }
     } catch (err) {
       console.error("Failed to refresh /auth/me:", err);
+      setError(err instanceof Error ? err.message : "Couldn't load your account");
     } finally {
       setLoading(false);
     }
@@ -150,6 +156,37 @@ export function SettingsScreen() {
           Manage your profile, organization, and account preferences.
         </p>
       </header>
+
+      {error ? (
+        <Card
+          className="border-[var(--color-caution-border)] bg-[var(--color-caution-soft)]/60 p-4"
+          role="alert"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--color-caution-soft)] text-[var(--color-caution-strong)]"
+              aria-hidden
+            >
+              <AlertTriangle className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-[var(--color-caution-strong)]">
+                Couldn&rsquo;t load the latest account info
+              </p>
+              <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
+                Showing what we already have. {error}
+              </p>
+              <div className="mt-3">
+                <Button variant="outline" size="sm" onClick={fetchMe}>
+                  <RefreshCw className="h-4 w-4" />
+                  Try again
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-10">
         {/* Left nav (desktop) / horizontal pills (mobile) */}
