@@ -77,8 +77,12 @@ async def get_system_stats(
         assistant_data = assistant_stats.first()
         
         # Content statistics
+        # NOTE: .label() must wrap the column expression INSIDE select(),
+        # not the Select itself — chaining .label() on the Select returns
+        # a Label object that has no .select_from(). The label is also
+        # unused here since we extract via .scalar(); dropping it.
         content_stats = await db.execute(
-            select(func.count(ContentChunk.id)).label('total_chunks')
+            select(func.count(ContentChunk.id))
             .select_from(ContentChunk)
             .join(Assistant, Assistant.id == ContentChunk.assistant_id)
             .where(Assistant.tenant_id == current_tenant.id)
