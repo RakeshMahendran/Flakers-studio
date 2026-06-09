@@ -76,7 +76,7 @@ export function DashboardHero({ firstName, stats, onCreate }: DashboardHeroProps
             )}
           >
             <Sparkles className="h-3 w-3" />
-            v2.4 · Tambo AI integrated
+            v2.4
           </span>
           <h1
             id="dashboard-hero-title"
