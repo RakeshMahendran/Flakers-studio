@@ -13,14 +13,30 @@ export default function DashboardLayout({
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Check if user is authenticated
+    // Require an authenticated session AND a valid access token.
+    // A stored user without accessToken (stale or partial session) would
+    // pass every UI check but every API call would 401 with
+    // "Authorization header required". Clearing the broken object and
+    // routing to /login forces a fresh login so a real token lands.
     if (typeof window !== "undefined") {
-      const user = localStorage.getItem("user");
-      if (!user) {
+      const raw = localStorage.getItem("user");
+      if (!raw) {
         router.push("/login");
-      } else {
-        setIsChecking(false);
+        return;
       }
+      try {
+        const parsed = JSON.parse(raw) as { accessToken?: string } | null;
+        if (!parsed?.accessToken) {
+          localStorage.removeItem("user");
+          router.push("/login");
+          return;
+        }
+      } catch {
+        localStorage.removeItem("user");
+        router.push("/login");
+        return;
+      }
+      setIsChecking(false);
     }
   }, [router]);
 

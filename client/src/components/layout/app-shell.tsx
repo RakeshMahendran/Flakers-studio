@@ -293,8 +293,11 @@ function SidebarInner({ collapsed, onItemClick }: SidebarInnerProps) {
               </span>
               {!collapsed && (
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                  <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
-                    {user?.email ?? "Guest"}
+                  <span
+                    className="truncate text-sm font-medium text-[var(--color-text-primary)]"
+                    title={user?.email ?? "Guest"}
+                  >
+                    {user?.email ? (user.email.split("@")[0] || user.email) : "Guest"}
                   </span>
                   <span className="truncate text-xs text-[var(--color-text-muted)]">
                     {user?.tenantName ?? "Tenant"}
