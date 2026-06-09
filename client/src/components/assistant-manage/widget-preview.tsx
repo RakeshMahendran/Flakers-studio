@@ -128,7 +128,7 @@ export function WidgetPreview({ config, className }: WidgetPreviewProps) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white shadow-lg ring-1 ring-black/10 transition-transform hover:scale-105 active:scale-100"
+          className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium text-white shadow-md ring-1 ring-black/10 transition-transform hover:scale-[1.02] active:scale-100"
           style={{ backgroundColor: primary }}
           aria-label={open ? "Close chat widget" : "Open chat widget"}
         >

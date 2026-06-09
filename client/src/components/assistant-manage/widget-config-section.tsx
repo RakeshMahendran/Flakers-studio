@@ -43,10 +43,15 @@ export function WidgetConfigSection({ assistantId, token }: WidgetConfigSectionP
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [savedAt, setSavedAt] = React.useState<number | null>(null);
+  const [reloadTick, setReloadTick] = React.useState(0);
+  const [originsError, setOriginsError] = React.useState<string | null>(null);
+  const [colorError, setColorError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
+    setLoadError(null);
     (async () => {
       try {
         const res = await apiGet(`/api/assistant/${assistantId}/widget-config`, token);
@@ -58,10 +63,10 @@ export function WidgetConfigSection({ assistantId, token }: WidgetConfigSectionP
           setOriginsRaw((wc.allowed_origins || []).join("\n"));
         } else {
           const err = await res.json().catch(() => ({}));
-          setError(err.detail || `Failed to load widget config (${res.status})`);
+          setLoadError(err.detail || `Failed to load widget config (${res.status})`);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load widget config");
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Failed to load widget config");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -69,15 +74,36 @@ export function WidgetConfigSection({ assistantId, token }: WidgetConfigSectionP
     return () => {
       cancelled = true;
     };
-  }, [assistantId, token]);
+  }, [assistantId, token, reloadTick]);
 
   const handleSave = async () => {
-    setSaving(true);
-    setError(null);
+    // Client-side validation — inline messages, no toasts.
+    setOriginsError(null);
+    setColorError(null);
     const origins = originsRaw
       .split(/[\n,]/)
       .map((s) => s.trim())
       .filter(Boolean);
+    const invalidOrigin = origins.find((o) => {
+      try {
+        const u = new URL(o);
+        return u.protocol !== "http:" && u.protocol !== "https:";
+      } catch {
+        return true;
+      }
+    });
+    if (invalidOrigin) {
+      setOriginsError(`"${invalidOrigin}" is not a valid origin (use https://example.com)`);
+      return;
+    }
+    const color = (config.primary_color || "").trim();
+    if (color && !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) {
+      setColorError("Primary color must be a hex value like #14532d");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
     const payload = {
       assistant_id: assistantId,
       widget_config: { ...config, allowed_origins: origins },
@@ -111,8 +137,37 @@ export function WidgetConfigSection({ assistantId, token }: WidgetConfigSectionP
           <CardTitle>Widget</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          <Skeleton className="h-10 w-full" />
           <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Widget</CardTitle>
+          <CardDescription>We couldn&apos;t load this widget&apos;s configuration.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-4">
+            <p className="text-sm text-[var(--color-refuse-strong)]">{loadError}</p>
+            <div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLoading(true);
+                  setReloadTick((t) => t + 1);
+                }}
+              >
+                Try again
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     );
@@ -165,14 +220,24 @@ export function WidgetConfigSection({ assistantId, token }: WidgetConfigSectionP
           </label>
           <textarea
             value={originsRaw}
-            onChange={(e) => setOriginsRaw(e.target.value)}
+            onChange={(e) => {
+              setOriginsRaw(e.target.value);
+              if (originsError) setOriginsError(null);
+            }}
             placeholder="https://example.com&#10;https://app.example.com"
             rows={3}
-            className="w-full rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 font-mono text-xs text-[var(--input-fg)] focus:border-[var(--input-border-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+            aria-invalid={Boolean(originsError)}
+            className={`w-full rounded-md border bg-[var(--input-bg)] px-3 py-2 font-mono text-xs text-[var(--input-fg)] focus:border-[var(--input-border-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)] ${
+              originsError ? "border-[var(--color-refuse)]" : "border-[var(--input-border)]"
+            }`}
           />
-          <p className="text-xs text-[var(--color-text-tertiary)]">
-            One per line. Requests from other origins will be blocked.
-          </p>
+          {originsError ? (
+            <p className="text-xs text-[var(--color-refuse)]">{originsError}</p>
+          ) : (
+            <p className="text-xs text-[var(--color-text-tertiary)]">
+              One per line. Requests from other origins will be blocked.
+            </p>
+          )}
         </div>
 
         {/* Appearance */}
@@ -225,17 +290,29 @@ export function WidgetConfigSection({ assistantId, token }: WidgetConfigSectionP
               <input
                 type="color"
                 value={config.primary_color ?? "#14532d"}
-                onChange={(e) => update("primary_color", e.target.value)}
+                onChange={(e) => {
+                  update("primary_color", e.target.value);
+                  if (colorError) setColorError(null);
+                }}
                 className="h-10 w-14 cursor-pointer rounded-md border border-[var(--input-border)] bg-[var(--input-bg)]"
               />
               <input
                 type="text"
                 value={config.primary_color ?? ""}
-                onChange={(e) => update("primary_color", e.target.value)}
-                className="h-10 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 font-mono text-sm text-[var(--input-fg)] focus:border-[var(--input-border-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                onChange={(e) => {
+                  update("primary_color", e.target.value);
+                  if (colorError) setColorError(null);
+                }}
+                aria-invalid={Boolean(colorError)}
+                className={`h-10 flex-1 rounded-md border bg-[var(--input-bg)] px-3 font-mono text-sm text-[var(--input-fg)] focus:border-[var(--input-border-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)] ${
+                  colorError ? "border-[var(--color-refuse)]" : "border-[var(--input-border)]"
+                }`}
                 placeholder="#14532d"
               />
             </div>
+            {colorError ? (
+              <p className="text-xs text-[var(--color-refuse)]">{colorError}</p>
+            ) : null}
           </div>
         </div>
 

@@ -93,8 +93,29 @@ export function AssistantManageScreen({ assistantId }: AssistantManageScreenProp
           <ArrowLeft className="h-4 w-4" />
           Back to dashboard
         </Button>
-        <div className="rounded-md border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-4 text-sm text-[var(--color-refuse-strong)]">
-          {error || "Assistant not found."}
+        <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-4">
+          <p className="text-sm text-[var(--color-refuse-strong)]">
+            {error || "Assistant not found."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setLoading(true);
+                fetchAssistant();
+              }}
+            >
+              Try again
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/dashboard")}
+            >
+              Back to dashboard
+            </Button>
+          </div>
         </div>
       </div>
     );

@@ -59,6 +59,7 @@ export function AssistantCreationFlow({
     description: "",
     siteUrl: "",
   });
+  const [formErrors, setFormErrors] = useState<{ name?: string; siteUrl?: string }>({});
   const [discoveredContent, setDiscoveredContent] = useState<DiscoveredContent | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [scrapedUrls, setScrapedUrls] = useState<string[]>([]);
@@ -136,11 +137,36 @@ export function AssistantCreationFlow({
     }
   ];
 
+  const validateDetails = () => {
+    const errs: { name?: string; siteUrl?: string } = {};
+    if (!formData.name.trim()) errs.name = "Assistant name is required";
+    const raw = formData.siteUrl.trim();
+    if (!raw) {
+      errs.siteUrl = "Website URL is required";
+    } else {
+      try {
+        const u = new URL(raw);
+        if (u.protocol !== "http:" && u.protocol !== "https:") {
+          errs.siteUrl = "URL must start with http:// or https://";
+        }
+      } catch {
+        errs.siteUrl = "Enter a valid URL (e.g. https://example.com)";
+      }
+    }
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleNext = () => {
     const stepIndex = steps.findIndex(s => s.id === currentStep);
     if (stepIndex < steps.length - 1) {
       const nextStep = steps[stepIndex + 1].id as Step;
-      
+
+      // Run field-level validation before leaving the details step.
+      if (currentStep === "details" && !validateDetails()) {
+        return;
+      }
+
       if (nextStep === "scraping") {
         handleContentDiscovery();
       } else if (nextStep === "ingestion") {
@@ -645,8 +671,8 @@ export function AssistantCreationFlow({
                   <Card
                     className={`cursor-pointer transition-all duration-200 ${
                       formData.sourceType === "website"
-                        ? "ring-2 ring-blue-500 bg-blue-50/50"
-                        : "hover:shadow-lg"
+                        ? "ring-1 ring-blue-400/70 bg-blue-50/40"
+                        : "hover:shadow-md"
                     }`}
                     onClick={() => setFormData({ ...formData, sourceType: "website" })}
                   >
@@ -707,8 +733,8 @@ export function AssistantCreationFlow({
                       key={template.id}
                       className={`cursor-pointer transition-all duration-200 ${
                         formData.template === template.id
-                          ? "ring-2 ring-blue-500 bg-blue-50/50"
-                          : "hover:shadow-lg"
+                          ? "ring-1 ring-blue-400/70 bg-blue-50/40"
+                          : "hover:shadow-md"
                       }`}
                       onClick={() => setFormData({ ...formData, template: template.id as any })}
                     >
@@ -770,10 +796,15 @@ export function AssistantCreationFlow({
                     <Input
                       label="Assistant Name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, name: e.target.value });
+                        if (formErrors.name) setFormErrors((p) => ({ ...p, name: undefined }));
+                      }}
                       placeholder="e.g., Support Assistant"
+                      error={formErrors.name}
+                      aria-required="true"
                     />
-                    
+
                     <Textarea
                       label="Description (Optional)"
                       value={formData.description}
@@ -781,13 +812,18 @@ export function AssistantCreationFlow({
                       placeholder="Describe what this assistant will help with..."
                       rows={3}
                     />
-                    
+
                     <Input
                       label="Website URL"
                       type="url"
                       value={formData.siteUrl}
-                      onChange={(e) => setFormData({ ...formData, siteUrl: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, siteUrl: e.target.value });
+                        if (formErrors.siteUrl) setFormErrors((p) => ({ ...p, siteUrl: undefined }));
+                      }}
                       placeholder="https://example.com"
+                      error={formErrors.siteUrl}
+                      aria-required="true"
                     />
                     
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -913,15 +949,31 @@ export function AssistantCreationFlow({
                       <Card>
                         <h3 className="text-lg font-bold text-slate-900 mb-2">Scrape issue</h3>
                         <p className="text-sm text-slate-600">{scrapeError}</p>
+                        <div className="mt-4">
+                          <Button
+                            variant="secondary"
+                            onClick={() => handleContentDiscovery()}
+                            disabled={isDiscovering}
+                          >
+                            Retry scrape
+                          </Button>
+                        </div>
                       </Card>
                     )}
 
                     {!scrapeError && uniqueScrapedUrls.length === 0 && (
                       <Card>
                         <h3 className="text-lg font-bold text-slate-900 mb-2">No scraped URLs yet</h3>
-                        <p className="text-sm text-slate-600">
-                          We didn’t receive the final scrape results. If you still see discovered URLs above, wait a moment or retry.
+                        <p className="text-sm text-slate-600 mb-4">
+                          We didn&apos;t receive the final scrape results. If you still see discovered URLs above, wait a moment or retry.
                         </p>
+                        <Button
+                          variant="secondary"
+                          onClick={() => handleContentDiscovery()}
+                          disabled={isDiscovering}
+                        >
+                          Retry scrape
+                        </Button>
                       </Card>
                     )}
 

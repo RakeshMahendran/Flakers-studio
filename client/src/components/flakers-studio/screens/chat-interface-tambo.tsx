@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { apiGet } from "@/lib/api-client";
 import { cn } from "@/lib/design-system";
-import { Badge } from "@/components/ui/primitives";
+import { Badge, Skeleton } from "@/components/ui/primitives";
 
 import { Composer, type ComposerHandle } from "../chat-ui/composer";
 import { EmptyState } from "../chat-ui/empty-state";
@@ -89,29 +89,93 @@ function ChatInterfaceTamboInner({ assistantId }: ChatInterfaceTamboProps) {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[var(--color-background)]">
-        <div className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
-          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          Loading assistant…
+      <div
+        className="flex h-screen w-full overflow-hidden bg-[var(--color-background)]"
+        aria-busy="true"
+        aria-label="Loading assistant"
+      >
+        {/* Skeleton history pane (xl only) */}
+        <div className="hidden h-full w-72 flex-shrink-0 border-r border-[var(--color-border-subtle)] bg-[var(--color-surface)] xl:flex xl:flex-col">
+          <div className="flex flex-col gap-3 border-b border-[var(--color-border-subtle)] px-4 py-4">
+            <Skeleton className="h-3 w-20" />
+            <div className="flex items-start gap-2">
+              <Skeleton className="h-9 w-9 rounded-lg" />
+              <div className="flex flex-1 flex-col gap-1.5">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-4 w-20 rounded-full" />
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 px-3 py-3">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+          <div className="flex flex-col gap-2 px-3 py-2">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
         </div>
+        {/* Skeleton main */}
+        <main className="relative flex h-full min-w-0 flex-1 flex-col">
+          <div className="flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-16 rounded-full" />
+            </div>
+            <Skeleton className="hidden h-4 w-20 rounded-full sm:block" />
+          </div>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
+            <span
+              className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent text-[var(--color-text-muted)]"
+              aria-hidden
+            />
+            <p className="text-sm text-[var(--color-text-muted)]">Loading assistant…</p>
+          </div>
+        </main>
       </div>
     );
   }
 
   if (!assistant) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[var(--color-background)]">
-        <div className="text-center">
-          <p className="text-sm text-[var(--color-text-muted)]">
-            Assistant not found.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="mt-3 text-sm font-medium text-[var(--color-brand)] hover:text-[var(--color-brand-hover)]"
-          >
-            Return to dashboard
-          </button>
+      <div className="flex h-screen items-center justify-center bg-[var(--color-background)] px-6">
+        <div className="flex max-w-sm flex-col items-center gap-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-6 text-center shadow-[var(--elevation-1)]">
+          <ShieldCheck className="h-8 w-8 text-[var(--color-text-muted)]" aria-hidden />
+          <div className="flex flex-col gap-1.5">
+            <p className="text-base font-semibold text-[var(--color-text-primary)]">
+              Assistant not available
+            </p>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              We couldn&apos;t load this assistant. It may have been deleted, or you may not
+              have access.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                setAssistant(null);
+                // Bump dependency to re-trigger the effect
+                router.refresh();
+              }}
+              className={cn(
+                "inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium",
+                "border border-[var(--button-outline-border)] bg-[var(--button-outline-bg)] text-[var(--button-outline-fg)]",
+                "hover:bg-[var(--button-outline-bg-hover)] hover:border-[var(--color-border-strong)]",
+              )}
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              className="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-[var(--color-brand)] hover:text-[var(--color-brand-hover)]"
+            >
+              Return to dashboard
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -135,8 +199,11 @@ function ChatInterfaceTamboInner({ assistantId }: ChatInterfaceTamboProps) {
         Skip to chat
       </a>
 
-      {/* Desktop left pane (>= md) */}
-      <div className="hidden h-full w-80 flex-shrink-0 md:block">
+      {/* Desktop left pane — only show on viewports wide enough to fit
+          both the AppShell sidebar (w-60) and this history pane (w-80)
+          comfortably alongside a usable conversation column. Below xl,
+          we collapse to the mobile sheet to avoid overflow. */}
+      <div className="hidden h-full w-72 flex-shrink-0 xl:block">
         <ThreadHistoryPane assistantName={assistant.name} onBack={onBack} />
       </div>
 
@@ -198,7 +265,7 @@ function ChatHeader({
           onClick={onOpenHistory}
           aria-label="Open conversation history"
           className={cn(
-            "inline-flex h-9 w-9 items-center justify-center rounded-md md:hidden",
+            "inline-flex h-9 w-9 items-center justify-center rounded-md xl:hidden",
             "text-[var(--color-text-muted)] hover:bg-[var(--button-ghost-bg-hover)]",
             "hover:text-[var(--color-text-primary)]",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",

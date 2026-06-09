@@ -40,6 +40,8 @@ export function ApiKeysSection({ assistantId, token }: ApiKeysSectionProps) {
   const [creating, setCreating] = React.useState(false);
   const [newKeyName, setNewKeyName] = React.useState("");
   const [newKeyRate, setNewKeyRate] = React.useState(60);
+  const [createError, setCreateError] = React.useState<string | null>(null);
+  const [nameTouched, setNameTouched] = React.useState(false);
 
   // Newly-created key — shown ONCE with the raw value, then cleared.
   const [revealedKey, setRevealedKey] = React.useState<string | null>(null);
@@ -69,6 +71,8 @@ export function ApiKeysSection({ assistantId, token }: ApiKeysSectionProps) {
   }, [fetchKeys]);
 
   const handleCreate = async () => {
+    setNameTouched(true);
+    setCreateError(null);
     if (!newKeyName.trim()) return;
     setCreating(true);
     try {
@@ -82,13 +86,14 @@ export function ApiKeysSection({ assistantId, token }: ApiKeysSectionProps) {
         setRevealedKey(data.api_key);
         setNewKeyName("");
         setNewKeyRate(60);
+        setNameTouched(false);
         await fetchKeys();
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || `Failed to create API key (${res.status})`);
+        setCreateError(err.detail || `Failed to create API key (${res.status})`);
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to create API key");
+      setCreateError(e instanceof Error ? e.message : "Failed to create API key");
     } finally {
       setCreating(false);
     }
@@ -97,16 +102,17 @@ export function ApiKeysSection({ assistantId, token }: ApiKeysSectionProps) {
   const handleRevoke = async (key: ApiKey) => {
     if (!confirm(`Revoke API key "${key.name}"? This cannot be undone.`)) return;
     setRevokingIds((s) => new Set(s).add(key.id));
+    setError(null);
     try {
       const res = await apiDelete(`/api/assistant/${assistantId}/api-keys/${key.id}`, token);
       if (res.ok) {
         await fetchKeys();
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err.detail || `Failed to revoke key (${res.status})`);
+        setError(err.detail || `Failed to revoke key (${res.status})`);
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to revoke key");
+      setError(e instanceof Error ? e.message : "Failed to revoke key");
     } finally {
       setRevokingIds((s) => {
         const next = new Set(s);
@@ -141,7 +147,7 @@ export function ApiKeysSection({ assistantId, token }: ApiKeysSectionProps) {
       <CardContent className="flex flex-col gap-6">
         {/* Reveal newly-created key (shown once) */}
         {revealedKey ? (
-          <div className="rounded-lg border border-[var(--color-trust-border)] bg-[var(--color-trust-soft)] p-4">
+          <div className="rounded-xl border border-[var(--color-trust-border)] bg-[var(--color-trust-soft)] p-4">
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-trust-strong)]" />
               <div className="flex-1 min-w-0">
@@ -171,15 +177,21 @@ export function ApiKeysSection({ assistantId, token }: ApiKeysSectionProps) {
         ) : null}
 
         {/* Create new key form */}
-        <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-sunken)] p-4">
+        <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-sunken)] p-4">
           <p className="mb-3 text-sm font-medium text-[var(--color-text-primary)]">Generate new key</p>
           <div className="grid gap-3 sm:grid-cols-[2fr_1fr_auto]">
             <Input
               label="Name"
               placeholder="e.g. Production website"
               value={newKeyName}
-              onChange={(e) => setNewKeyName(e.target.value)}
+              onChange={(e) => {
+                setNewKeyName(e.target.value);
+                if (createError) setCreateError(null);
+              }}
+              onBlur={() => setNameTouched(true)}
               disabled={creating}
+              error={nameTouched && !newKeyName.trim() ? "Name is required" : undefined}
+              aria-required="true"
             />
             <Input
               label="Rate limit / min"
@@ -201,6 +213,11 @@ export function ApiKeysSection({ assistantId, token }: ApiKeysSectionProps) {
               </Button>
             </div>
           </div>
+          {createError ? (
+            <div className="mt-3 rounded-md border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-2.5 text-xs text-[var(--color-refuse-strong)]">
+              {createError}
+            </div>
+          ) : null}
         </div>
 
         {/* Existing keys list */}
@@ -211,7 +228,21 @@ export function ApiKeysSection({ assistantId, token }: ApiKeysSectionProps) {
               <Skeleton className="h-16 w-full rounded-md" />
             </>
           ) : error ? (
-            <p className="text-sm text-[var(--color-refuse)]">{error}</p>
+            <div className="flex flex-col gap-2 rounded-md border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-3">
+              <p className="text-sm text-[var(--color-refuse-strong)]">{error}</p>
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setLoading(true);
+                    fetchKeys();
+                  }}
+                >
+                  Try again
+                </Button>
+              </div>
+            </div>
           ) : keys.length === 0 ? (
             <div className="rounded-md border border-dashed border-[var(--color-border-subtle)] bg-[var(--color-surface-sunken)] p-6 text-center text-sm text-[var(--color-text-secondary)]">
               No API keys yet. Create your first key above.

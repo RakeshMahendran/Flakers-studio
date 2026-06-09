@@ -85,6 +85,8 @@ export function AssistantReviewScreen({ assistantId }: AssistantReviewScreenProp
   const shell = useAppShell();
   const [assistant, setAssistant] = useState<Assistant | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     shell.registerAssistants([]);
@@ -94,6 +96,8 @@ export function AssistantReviewScreen({ assistantId }: AssistantReviewScreenProp
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError(null);
     (async () => {
       if (!user) return;
       try {
@@ -105,10 +109,19 @@ export function AssistantReviewScreen({ assistantId }: AssistantReviewScreenProp
             ? data.assistants.map(normalizeAssistant)
             : [];
           const found = list.find((a: Assistant) => a.id === assistantId);
-          if (found) setAssistant(found);
+          if (found) {
+            setAssistant(found);
+          } else {
+            setError("We couldn't find this assistant. It may have been deleted.");
+          }
+        } else {
+          setError(`Failed to load assistant (${response.status})`);
         }
-      } catch (error) {
-        console.error("Failed to fetch assistant:", error);
+      } catch (err) {
+        console.error("Failed to fetch assistant:", err);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load assistant");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -116,7 +129,7 @@ export function AssistantReviewScreen({ assistantId }: AssistantReviewScreenProp
     return () => {
       cancelled = true;
     };
-  }, [assistantId, user]);
+  }, [assistantId, user, refreshTick]);
 
   if (loading) {
     return (
@@ -138,8 +151,26 @@ export function AssistantReviewScreen({ assistantId }: AssistantReviewScreenProp
           <ChevronLeft className="h-4 w-4" />
           Back to dashboard
         </Button>
-        <div className="rounded-md border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-4 text-sm text-[var(--color-refuse-strong)]">
-          Assistant not found.
+        <div className="flex flex-col gap-3 rounded-xl border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-4">
+          <p className="text-sm text-[var(--color-refuse-strong)]">
+            {error || "Assistant not found."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRefreshTick((t) => t + 1)}
+            >
+              Try again
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/dashboard")}
+            >
+              Back to dashboard
+            </Button>
+          </div>
         </div>
       </div>
     );
