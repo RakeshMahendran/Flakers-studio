@@ -3,16 +3,19 @@
 /**
  * /register — split-layout signup screen.
  *
- * The backend register endpoint may not yet exist on this branch; we POST
- * to /api/auth/register and degrade gracefully to a "Check your email"
- * confirmation if the response is non-2xx (so this page is shippable
- * before the backend route lands).
+ * The backend `/auth/register` endpoint creates the user immediately and
+ * returns a full AuthResponse with access_token. We use that to sign the
+ * user in directly and redirect to /dashboard — no email confirmation
+ * stage, because no SMTP is wired (and faking a "Check your email"
+ * screen for an email that never arrives is worse than just signing in).
  */
 import * as React from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowRight, Eye, EyeOff, MailCheck, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, ArrowRight, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Button, Input } from "@/components/ui/primitives";
 import { confidenceColor } from "@/lib/design-system";
+import { useAuth } from "@/contexts/auth-context";
 import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { RegisterAside } from "./_aside";
 
@@ -68,10 +71,9 @@ const STRENGTH_TEXT: Record<"trust" | "caution" | "refuse", string> = {
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
-type Stage = "form" | "confirm";
-
 export default function RegisterPage() {
-  const [stage, setStage] = React.useState<Stage>("form");
+  const router = useRouter();
+  const { login } = useAuth();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -101,93 +103,41 @@ export default function RegisterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name,
           email,
           password,
+          full_name: name,
           tenant_name: tenant,
         }),
       });
-      if (!res.ok) {
-        // Backend stub may not exist yet; treat 404/501 as "queued" so the
-        // user still gets the confirmation flow.
-        if (res.status === 404 || res.status === 501) {
-          setStage("confirm");
-          return;
-        }
-        const data = await res.json().catch(() => null);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
         throw new Error(data?.detail || "Could not create account");
       }
-      setStage("confirm");
+
+      // Backend returns AuthResponse directly (access_token, refresh_token,
+      // user_id, tenant_id). Fetch /auth/me to get the human-readable
+      // tenant_name and full profile shape, then sign the user in.
+      const profileRes = await fetch("/api/auth/me", {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      });
+      const profile = await profileRes.json().catch(() => null);
+      if (!profileRes.ok || !profile) {
+        throw new Error(profile?.detail || "Account created, but profile lookup failed. Try signing in.");
+      }
+
+      login({
+        id: data.user_id,
+        email: profile.email ?? email,
+        tenantId: data.tenant_id,
+        tenantName: profile.tenant_name,
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+      });
+      // login() already pushes to /dashboard; no further action.
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create account");
-    } finally {
       setIsLoading(false);
     }
-  }
-
-  async function handleResend() {
-    setIsLoading(true);
-    try {
-      await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, tenant_name: tenant, resend: true }),
-      }).catch(() => null);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  if (stage === "confirm") {
-    return (
-      <AuthSplitLayout
-        eyebrow="Almost there"
-        title="Check your email"
-        subtitle={`We sent a confirmation link to ${email}. Click it to finish setting up your tenant.`}
-        aside={<RegisterAside />}
-        footer={
-          <span>
-            Wrong address?{" "}
-            <button
-              type="button"
-              onClick={() => setStage("form")}
-              className="font-medium text-[var(--color-brand)] hover:underline"
-            >
-              Edit and try again
-            </button>
-          </span>
-        }
-      >
-        <div className="space-y-5">
-          <div className="flex items-start gap-3 rounded-md border border-[var(--color-trust-border)] bg-[var(--color-trust-soft)] p-4 text-sm text-[var(--color-trust-strong)]">
-            <MailCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <div>
-              <p className="font-medium">Confirmation sent.</p>
-              <p className="mt-1 text-[var(--color-text-secondary)]">
-                The link expires in 30 minutes. If you don&apos;t see it, check spam — or resend below.
-              </p>
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            onClick={handleResend}
-            variant="outline"
-            size="md"
-            isLoading={isLoading}
-            disabled={isLoading}
-            className="w-full"
-          >
-            Resend confirmation
-          </Button>
-
-          <p className="text-xs text-[var(--color-text-muted)]">
-            <ShieldCheck className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" aria-hidden />
-            Your data stays in your tenant. Always.
-          </p>
-        </div>
-      </AuthSplitLayout>
-    );
   }
 
   return (
