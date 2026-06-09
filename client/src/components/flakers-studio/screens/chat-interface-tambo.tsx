@@ -67,6 +67,10 @@ export function ChatInterfaceTambo({ assistantId }: ChatInterfaceTamboProps) {
 interface ChatQueryResponse {
   decision: "ANSWER" | "REFUSE";
   answer?: string;
+  // Backend's ChatQueryResponse (backend/api/routes/chat.py) exposes
+  // the refusal explanation as `reason`, not `refusal_reason`. We accept
+  // both for forward compatibility, but `reason` is the actual wire field.
+  reason?: string;
   refusal_reason?: string;
   refusal_code?: string;
   confidence?: number;
@@ -133,7 +137,8 @@ function responseToRagResult(res: ChatQueryResponse): RagToolResult {
     success: true,
     decision: res.decision,
     answer: res.answer,
-    reason: res.refusal_reason,
+    // Backend field is `reason`; accept `refusal_reason` too for safety.
+    reason: res.reason ?? res.refusal_reason,
     refusal_code: res.refusal_code,
     confidence: res.confidence,
     sources: res.sources,
@@ -386,7 +391,7 @@ function ChatInterfaceTamboInner({ assistantId }: ChatInterfaceTamboProps) {
           content:
             data.decision === "ANSWER"
               ? (data.answer ?? "")
-              : (data.refusal_reason ?? ""),
+              : (data.reason ?? data.refusal_reason ?? ""),
           createdAt: new Date().toISOString(),
           ragResult: responseToRagResult(data),
           status: "sent",

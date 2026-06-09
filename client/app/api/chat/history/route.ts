@@ -18,8 +18,10 @@ export async function GET(request: NextRequest) {
     }
 
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
-    const url = new URL(`${backendUrl}/api/chat/history`);
-    
+    // Backend mounts the chat router at `/chat`, not `/api/chat`
+    // (see server/main.py: app.include_router(chat.router, prefix="/chat", ...)).
+    const url = new URL(`${backendUrl}/chat/history`);
+
     if (sessionId) {
       url.searchParams.append('session_id', sessionId);
     }
@@ -31,6 +33,11 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        // Forward the caller's Authorization header so the backend's
+        // `get_current_tenant` dependency can resolve the tenant.
+        ...(request.headers.get('authorization') && {
+          'Authorization': request.headers.get('authorization')!,
+        }),
       },
     });
 

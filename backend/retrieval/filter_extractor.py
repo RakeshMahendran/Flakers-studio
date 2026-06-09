@@ -469,10 +469,13 @@ class FilterExtractor:
                 ai_response.get("error", "unknown"),
                 ai_response.get("error_type", "unknown")
             )
-            # Return empty result to trigger fallback
-            result = FilterResult(raw_response=str(ai_response.get("error", "")))
-            self._cache.set(key, result)
-            return result
+            # Return empty result to trigger fallback. (Earlier versions of
+            # this method wrote to `self._cache` here, but the internal LRU
+            # was deleted when caching moved to the decorator — the old
+            # line would have raised AttributeError + NameError, which only
+            # didn't crash production because rag_pipeline wraps this in a
+            # try/except.)
+            return FilterResult(raw_response=str(ai_response.get("error", "")))
 
         result = self._parse(ai_response.get("content", ""))
         return result

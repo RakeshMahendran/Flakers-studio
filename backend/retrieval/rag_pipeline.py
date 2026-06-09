@@ -272,11 +272,18 @@ Guidelines:
             )
             messages = recent_messages.scalars().all()
             if messages:
+                # Each ChatMessage row stores BOTH the user's turn and the
+                # assistant's reply (user_message is NOT NULL on the model).
+                # The previous code keyed role off `if msg.user_message` —
+                # that's always truthy, so every turn was labelled "User"
+                # and the assistant's replies were never shown to the LLM,
+                # destroying multi-turn context. Emit both sides per row.
                 conversation_context = "\n\nRecent conversation:\n"
                 for msg in reversed(messages):
-                    role = "User" if msg.user_message else "Assistant"
-                    content = msg.user_message or msg.assistant_response or ""
-                    conversation_context += f"{role}: {content[:200]}\n"
+                    if msg.user_message:
+                        conversation_context += f"User: {msg.user_message[:200]}\n"
+                    if msg.assistant_response:
+                        conversation_context += f"Assistant: {msg.assistant_response[:200]}\n"
 
             response_mode = detect_response_mode(user_message)
             base_system_prompt = get_synthesis_system_prompt(
@@ -436,9 +443,33 @@ Guidelines:
     @staticmethod
     async def get_or_create_session(db: AsyncSession, assistant_id: str, session_id: Optional[str]) -> ChatSession:
         if session_id:
-            result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
-            session = result.scalar_one_or_none()
-            if session:
+            # session_id arrives from the client and is typed `Optional[str]`
+            # — but ChatSession.id is a Postgres UUID column. A malformed
+            # string (e.g. an empty thread id, "new", or a stale token from
+            # a different scheme) would otherwise raise inside the driver
+            # and 500 the whole request. Treat any lookup error as "session
+            # not found" and fall through to creating a fresh one. We also
+            # confirm the session belongs to the requested assistant so a
+            # leaked id from another assistant can't be reused.
+            try:
+                result = await db.execute(
+                    select(ChatSession).where(ChatSession.id == session_id)
+                )
+                session = result.scalar_one_or_none()
+            except Exception as e:
+                logger.warning(
+                    "Invalid session_id %r (%s); creating a new session",
+                    session_id,
+                    e,
+                )
+                # The transaction may be in a broken state after a driver
+                # error — roll it back so the subsequent INSERT can commit.
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+                session = None
+            if session and str(session.assistant_id) == str(assistant_id):
                 return session
 
         session = ChatSession(assistant_id=assistant_id, session_token=secrets.token_urlsafe(32))
