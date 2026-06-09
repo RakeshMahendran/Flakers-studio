@@ -65,6 +65,22 @@ class AzureAIService:
             logger.info(f"Calling Azure AI for user message: {user_message[:100]}")
 
             t0 = time.perf_counter()
+            # Reasoning-class Azure models (o1/o3/o5, GPT-5) reject most
+            # sampling params: 'Unsupported value: temperature does not
+            # support 0.3' / 'top_p / frequency_penalty / presence_penalty
+            # not supported'. We send only model + messages + token cap and
+            # let the model use its defaults; only opt in to a custom
+            # temperature for legacy models that accept it (gated by
+            # settings.AZURE_MODEL_SUPPORTS_SAMPLING, default False so we
+            # behave safely on newer deployments).
+            extra_params = {}
+            if getattr(settings, "AZURE_MODEL_SUPPORTS_SAMPLING", False):
+                extra_params = {
+                    "temperature": temperature,
+                    "top_p": 0.9,
+                    "frequency_penalty": 0,
+                    "presence_penalty": 0,
+                }
             response = self.client.chat.completions.create(
                 model=self.deployment_name,
                 messages=[
@@ -72,13 +88,9 @@ class AzureAIService:
                     {"role": "user", "content": user_message}
                 ],
                 # max_completion_tokens supersedes max_tokens on newer Azure
-                # OpenAI chat models (GPT-4o, GPT-5, o-series). max_tokens
-                # raises "Unsupported parameter" on those deployments.
+                # OpenAI chat models (GPT-4o, GPT-5, o-series).
                 max_completion_tokens=max_tokens,
-                temperature=temperature,
-                top_p=0.9,
-                frequency_penalty=0,
-                presence_penalty=0
+                **extra_params,
             )
             latency_ms = (time.perf_counter() - t0) * 1000
 
@@ -136,18 +148,20 @@ class AzureAIService:
         """
         try:
             t0 = time.perf_counter()
+            # Same sampling-param restriction as generate_response: newer
+            # Azure models reject custom temperature/top_p. Gate via the
+            # same settings flag.
+            extra_params = {}
+            if getattr(settings, "AZURE_MODEL_SUPPORTS_SAMPLING", False):
+                extra_params = {"temperature": temperature, "top_p": 0.9}
             response = self.client.chat.completions.create(
                 model=self.filter_extraction_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
                 ],
-                # Newer Azure OpenAI chat models require max_completion_tokens
-                # (max_tokens triggers an "Unsupported parameter" 400). Same
-                # fix as the primary generate_response call above.
                 max_completion_tokens=max_tokens,
-                temperature=temperature,
-                top_p=0.9,
+                **extra_params,
             )
             latency_ms = (time.perf_counter() - t0) * 1000
 
