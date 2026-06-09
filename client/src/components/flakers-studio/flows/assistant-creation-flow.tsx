@@ -81,8 +81,29 @@ export function AssistantCreationFlow({
   const [discoveredContent, setDiscoveredContent] = useState<DiscoveredContent | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [scrapedUrls, setScrapedUrls] = useState<string[]>([]);
+  // Selection state: tracks DESELECTED URLs (so default is "all selected"
+  // and newly-discovered URLs are included automatically). Storing a
+  // Set<string> keyed by URL avoids per-URL useState explosion.
+  const [deselectedUrls, setDeselectedUrls] = useState<Set<string>>(new Set());
 
   const uniqueScrapedUrls = useMemo(() => Array.from(new Set(scrapedUrls)), [scrapedUrls]);
+  const selectedUrls = useMemo(
+    () => uniqueScrapedUrls.filter((u) => !deselectedUrls.has(u)),
+    [uniqueScrapedUrls, deselectedUrls]
+  );
+  const allSelected = selectedUrls.length === uniqueScrapedUrls.length && uniqueScrapedUrls.length > 0;
+  const noneSelected = selectedUrls.length === 0;
+
+  const toggleUrlSelection = (url: string) => {
+    setDeselectedUrls((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  };
+  const selectAllUrls = () => setDeselectedUrls(new Set());
+  const deselectAllUrls = () => setDeselectedUrls(new Set(uniqueScrapedUrls));
 
   // Ingestion state
   const [isIngesting, setIsIngesting] = useState(false);
@@ -493,6 +514,11 @@ export function AssistantCreationFlow({
       // Start ingestion with SSE. apiFetch handles 401 redirect so a token
       // that expires between scrape completion and ingestion start doesn't
       // strand the user.
+      //
+      // Send `selected_urls` so the backend marks the rest SKIPPED instead
+      // of embedding every page on the site. When the user hasn't touched
+      // the selection UI this is just every URL we scraped (no behavior
+      // change), but it caps embedding+Qdrant cost when they deselect.
       const response = await apiFetch(
         `/api/projects/website/ingest?assistant_id=${createdAssistantId}`,
         {
@@ -500,6 +526,7 @@ export function AssistantCreationFlow({
           headers: {
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({ selected_urls: selectedUrls }),
         },
         user?.accessToken
       );
@@ -1139,27 +1166,73 @@ export function AssistantCreationFlow({
 
                     {uniqueScrapedUrls.length > 0 && (
                       <Card>
-                        <h3 className="text-lg font-semibold tracking-tight text-[var(--color-text-primary)] mb-4">
-                          Scraped URLs ({uniqueScrapedUrls.length})
-                        </h3>
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                          <div className="flex flex-col gap-0.5">
+                            <h3 className="text-lg font-semibold tracking-tight text-[var(--color-text-primary)]">
+                              Scraped URLs
+                            </h3>
+                            <p className="text-xs text-[var(--color-text-muted)]">
+                              <span className="font-medium text-[var(--color-text-secondary)]">
+                                {selectedUrls.length} selected
+                              </span>{" "}
+                              of {uniqueScrapedUrls.length} — only selected URLs will be ingested
+                              (chunked + embedded + indexed). Skipped URLs stay in the audit log.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={selectAllUrls}
+                              disabled={allSelected || isIngesting}
+                              className="text-xs font-medium text-[var(--color-brand)] hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+                            >
+                              Select all
+                            </button>
+                            <span className="text-xs text-[var(--color-text-muted)]">·</span>
+                            <button
+                              type="button"
+                              onClick={deselectAllUrls}
+                              disabled={noneSelected || isIngesting}
+                              className="text-xs font-medium text-[var(--color-brand)] hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+                            >
+                              Deselect all
+                            </button>
+                          </div>
+                        </div>
                         <div className="space-y-2 max-h-96 overflow-y-auto">
                           {uniqueScrapedUrls.map((url) => {
                             const isOpen = expandedUrl === url;
                             const loading = Boolean(urlContentLoading[url]);
                             const content = urlContentCache[url];
+                            const isSelected = !deselectedUrls.has(url);
 
                             return (
                               <div key={url} className="border border-[var(--color-border-subtle)] rounded-lg overflow-hidden">
-                                <button
-                                  type="button"
-                                  className="w-full text-left px-4 py-3 bg-[var(--color-surface)] hover:bg-[var(--color-surface-sunken)] flex items-center justify-between gap-4 transition-colors"
-                                  onClick={() => toggleUrl(url)}
-                                >
-                                  <span className="text-sm text-[var(--color-text-primary)] break-all flex-1">{url}</span>
-                                  <span className="text-xs text-[var(--color-text-muted)] shrink-0">
-                                    {isOpen ? "Hide" : "View"}
-                                  </span>
-                                </button>
+                                <div className="w-full px-4 py-3 bg-[var(--color-surface)] hover:bg-[var(--color-surface-sunken)] flex items-center gap-3 transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleUrlSelection(url)}
+                                    disabled={isIngesting}
+                                    aria-label={isSelected ? `Deselect ${url}` : `Select ${url}`}
+                                    className="h-4 w-4 shrink-0 rounded border-[var(--color-border-default)] text-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] cursor-pointer disabled:cursor-not-allowed"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="flex-1 min-w-0 text-left flex items-center justify-between gap-4"
+                                    onClick={() => toggleUrl(url)}
+                                  >
+                                    <span className={cn(
+                                      "text-sm break-all flex-1 transition-colors",
+                                      isSelected
+                                        ? "text-[var(--color-text-primary)]"
+                                        : "text-[var(--color-text-muted)] line-through"
+                                    )}>{url}</span>
+                                    <span className="text-xs text-[var(--color-text-muted)] shrink-0">
+                                      {isOpen ? "Hide" : "View"}
+                                    </span>
+                                  </button>
+                                </div>
 
                                 {isOpen && (
                                   <div className="px-4 py-3 bg-[var(--color-surface-sunken)] border-t border-[var(--color-border-subtle)]">

@@ -673,22 +673,39 @@ async def get_deletion_status(
         raise HTTPException(status_code=500, detail=f"Failed to check deletion status: {str(e)}")
 
 
+class IngestRequest(BaseModel):
+    """Optional body for /website/ingest.
+
+    selected_urls: when present and non-empty, the ingestion service
+    will only process IngestionURL rows whose `url` field is in this
+    list. Every other URL gets marked SKIPPED before ingestion fires,
+    so it stays in the audit trail but the embedding / Qdrant cost
+    is bounded to the user's selection.
+    """
+    selected_urls: Optional[List[str]] = None
+
+
 @router.post("/website/ingest")
 async def ingest_website_content(
     assistant_id: str,
+    request: Optional[IngestRequest] = None,
     db: AsyncSession = Depends(get_db),
     current_tenant: Tenant = Depends(get_current_tenant),
 ):
     """
     Start content ingestion with SSE streaming for real-time progress
-    
+
     This endpoint is called after scraping completes to:
     1. Process scraped content into chunks
     2. Generate embeddings
     3. Upload to vector database
-    
+
     Returns Server-Sent Events for real-time progress updates
     """
+    # Capture the selected_urls list here so the generate() closure can
+    # use it without re-deriving from a possibly-None Pydantic body.
+    selected_urls = (request.selected_urls if request else None) or None
+
     async def generate():
         try:
             # Get assistant
@@ -696,12 +713,12 @@ async def ingest_website_content(
                 select(Assistant).where(Assistant.id == assistant_id, Assistant.tenant_id == current_tenant.id)
             )
             assistant = result.scalar_one_or_none()
-            
+
             if not assistant:
                 error_data = {"event_type": "error", "error": "Assistant not found"}
                 yield f"data: {json.dumps(error_data)}\n\n"
                 return
-            
+
             # Find the most recent scraping job for this assistant that's ready for ingestion
             result = await db.execute(
                 select(IngestionJob)
@@ -714,11 +731,33 @@ async def ingest_website_content(
                 .limit(1)
             )
             job = result.scalar_one_or_none()
-            
+
             if not job:
                 error_data = {"event_type": "error", "error": "No scraping job ready for ingestion"}
                 yield f"data: {json.dumps(error_data)}\n\n"
                 return
+
+            # If the client sent a selected_urls list, mark every URL on
+            # this job that ISN'T in the list as SKIPPED so the ingestion
+            # service skips them. Reduces embedding + Qdrant cost when
+            # a user wants only a subset of the scraped URLs.
+            if selected_urls is not None:
+                selected_set = set(selected_urls)
+                url_rows_result = await db.execute(
+                    select(IngestionURL).where(IngestionURL.job_id == job.id)
+                )
+                all_urls = url_rows_result.scalars().all()
+                skipped_count = 0
+                for url_row in all_urls:
+                    if url_row.url not in selected_set and url_row.status == URLStatus.SCRAPED.value:
+                        url_row.status = URLStatus.SKIPPED.value
+                        skipped_count += 1
+                if skipped_count:
+                    await db.commit()
+                    logger.info(
+                        "Ingest selection: %d of %d URLs marked SKIPPED for job %s",
+                        skipped_count, len(all_urls), job.id,
+                    )
             
             # Send initial event
             init_data = {"event_type": "init", "job_id": str(job.id), "assistant_id": assistant_id}

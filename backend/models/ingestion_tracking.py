@@ -32,6 +32,7 @@ class URLStatus(str, enum.Enum):
     COMPLETED = "completed"
     PARTIAL = "partial"  # Some chunks uploaded, some failed
     FAILED = "failed"
+    SKIPPED = "skipped"  # User deselected before ingestion; preserved for audit
 
 class ChunkStatus(str, enum.Enum):
     """Chunk upload status"""

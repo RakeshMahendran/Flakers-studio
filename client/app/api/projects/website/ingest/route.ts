@@ -17,6 +17,17 @@ export async function POST(request: NextRequest) {
 
     const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
 
+    // Forward the request body verbatim (e.g. { selected_urls: [...] })
+    // so the backend can mark unselected URLs SKIPPED. Empty/missing body
+    // is fine — backend treats absent selected_urls as "ingest all".
+    let body: string | undefined;
+    try {
+      const json = await request.json();
+      body = JSON.stringify(json);
+    } catch {
+      body = undefined;
+    }
+
     const response = await fetch(
       `${backendUrl}/api/projects/website/ingest?assistant_id=${assistantId}`,
       {
@@ -27,6 +38,7 @@ export async function POST(request: NextRequest) {
             Authorization: request.headers.get("authorization")!,
           }),
         },
+        ...(body ? { body } : {}),
       }
     );
 
