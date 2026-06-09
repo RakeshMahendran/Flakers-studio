@@ -44,6 +44,7 @@ class CreateAssistantResponse(BaseModel):
 
 class AssistantResponse(BaseModel):
     id: str
+    project_id: str
     name: str
     description: Optional[str]
     source_type: str
@@ -100,6 +101,7 @@ class WidgetConfigResponse(BaseModel):
 def _to_response(assistant) -> AssistantResponse:
     return AssistantResponse(
         id=str(assistant.id),
+        project_id=str(assistant.project_id),
         name=assistant.name,
         description=assistant.description,
         source_type=assistant.source_type.value,
