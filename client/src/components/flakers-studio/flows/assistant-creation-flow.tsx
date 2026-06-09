@@ -23,6 +23,7 @@ import {
   Brain,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { apiFetch } from "@/lib/api-client";
 
 type Step = "source" | "template" | "details" | "scraping" | "ingestion";
 
@@ -85,6 +86,7 @@ export function AssistantCreationFlow({
 
   // Ingestion state
   const [isIngesting, setIsIngesting] = useState(false);
+  const [ingestionError, setIngestionError] = useState<string | null>(null);
   const [ingestionProgress, setIngestionProgress] = useState({
     stage: "",
     chunksCreated: 0,
@@ -237,12 +239,13 @@ export function AssistantCreationFlow({
         return;
       }
 
-      // Use the master scraping endpoint for real-time progress
-      const response = await fetch("/api/projects/website/scrape", {
+      // Use the master scraping endpoint for real-time progress.
+      // apiFetch handles 401 by clearing localStorage.user and redirecting
+      // to /login?session_expired=1 so users don't see opaque errors mid-flow.
+      const response = await apiFetch("/api/projects/website/scrape", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${user.accessToken}`,
         },
         body: JSON.stringify({
           tenant_id: user.tenantId,
@@ -265,7 +268,7 @@ export function AssistantCreationFlow({
             "/wp-admin/.*",
           ],
         }),
-      });
+      }, user.accessToken);
 
       if (!response.ok) {
         // Surface the backend's actual error instead of a generic string.
@@ -348,7 +351,26 @@ export function AssistantCreationFlow({
         } else if (data.event_type === "error") {
           const errorMessage = data.error || "Unknown error occurred during scraping";
           console.error("Scraping error:", errorMessage);
-          throw new Error(errorMessage);
+          // Mark as a backend-emitted error so the outer try/catch can
+          // distinguish it from a JSON parse failure (which the inner
+          // try/catch should swallow without aborting the stream).
+          const err = new Error(errorMessage);
+          (err as Error & { __sseBackendError?: boolean }).__sseBackendError = true;
+          throw err;
+        }
+      };
+
+      // Lets a backend "error" event propagate out of the stream loop so
+      // the outer try/catch can surface it to the user, while parse
+      // failures stay quietly logged.
+      const safeProcessLine = (line: string, source: string) => {
+        try {
+          processLine(line);
+        } catch (e) {
+          if ((e as { __sseBackendError?: boolean } | null)?.__sseBackendError) {
+            throw e;
+          }
+          console.error(`Error parsing SSE data (${source}):`, e);
         }
       };
 
@@ -362,21 +384,13 @@ export function AssistantCreationFlow({
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-          try {
-            processLine(line);
-          } catch (e) {
-            console.error("Error parsing SSE data:", e);
-          }
+          safeProcessLine(line, "stream");
         }
       }
 
       // Process any remaining buffered line (common place where the final SSE event gets stuck)
       if (buffer.trim().length > 0) {
-        try {
-          processLine(buffer.trim());
-        } catch (e) {
-          console.error("Error parsing trailing SSE buffer:", e);
-        }
+        safeProcessLine(buffer.trim(), "trailing");
       }
 
       if (!receivedComplete) {
@@ -386,13 +400,15 @@ export function AssistantCreationFlow({
           return;
         }
 
-        // Recovery path: fetch stored URLs from DB using job_id
+        // Recovery path: fetch stored URLs from DB using job_id.
+        // Uses apiFetch so a stale token here also bounces to /login instead
+        // of leaving the user staring at a stuck wizard.
         try {
-          const urlsRes = await fetch(`/api/projects/website/scrape/${currentJobId}/urls`, {
-            headers: {
-              ...(user?.accessToken && { Authorization: `Bearer ${user.accessToken}` }),
-            },
-          });
+          const urlsRes = await apiFetch(
+            `/api/projects/website/scrape/${currentJobId}/urls`,
+            {},
+            user?.accessToken
+          );
           if (!urlsRes.ok) {
             throw new Error("Failed to recover scraped URLs");
           }
@@ -464,6 +480,7 @@ export function AssistantCreationFlow({
 
     setCurrentStep("ingestion");
     setIsIngesting(true);
+    setIngestionError(null);
     setIngestionProgress({
       stage: "starting",
       chunksCreated: 0,
@@ -473,17 +490,33 @@ export function AssistantCreationFlow({
     });
 
     try {
-      // Start ingestion with SSE
-      const response = await fetch(`/api/projects/website/ingest?assistant_id=${createdAssistantId}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(user?.accessToken && { Authorization: `Bearer ${user.accessToken}` }),
+      // Start ingestion with SSE. apiFetch handles 401 redirect so a token
+      // that expires between scrape completion and ingestion start doesn't
+      // strand the user.
+      const response = await apiFetch(
+        `/api/projects/website/ingest?assistant_id=${createdAssistantId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+        user?.accessToken
+      );
 
       if (!response.ok) {
-        throw new Error("Failed to start ingestion");
+        // Surface backend error detail rather than a generic string so the
+        // user (and console) see WHY ingestion failed.
+        let detail: string | undefined;
+        try {
+          const body = await response.json();
+          detail = body?.detail || body?.error || body?.message;
+        } catch {
+          detail = await response.text().catch(() => undefined);
+        }
+        throw new Error(
+          `Failed to start ingestion (${response.status})${detail ? `: ${detail}` : ""}`
+        );
       }
 
       // Process SSE stream
@@ -537,9 +570,22 @@ export function AssistantCreationFlow({
                 handleNext();
               }, 1000);
             } else if (data.event_type === "error") {
-              console.error("Ingestion error:", data.error);
+              const errMsg = data.error || "Ingestion failed";
+              console.error("Ingestion error:", errMsg);
+              setIngestionError(errMsg);
               setIsIngesting(false);
               ingestionStartedRef.current = false; // Reset on error
+            } else if (data.event_type === "timeout") {
+              // Backend gave up polling after ~5min. Surface a soft error so
+              // the user can retry rather than silently leaving the spinner
+              // running forever.
+              const msg =
+                data.message ||
+                "Ingestion is taking longer than expected. Try again.";
+              console.warn("Ingestion timeout:", msg);
+              setIngestionError(msg);
+              setIsIngesting(false);
+              ingestionStartedRef.current = false;
             }
           } catch (e) {
             console.error("Error parsing SSE data:", e);
@@ -548,6 +594,7 @@ export function AssistantCreationFlow({
       }
     } catch (error) {
       console.error("Ingestion error:", error);
+      setIngestionError(error instanceof Error ? error.message : "Ingestion failed");
       setIsIngesting(false);
       ingestionStartedRef.current = false; // Reset on error
     }
@@ -588,13 +635,10 @@ export function AssistantCreationFlow({
 
     setUrlContentLoading((prev) => ({ ...prev, [url]: true }));
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/projects/website/scrape/${createdJobId}/content?url=${encodeURIComponent(url)}`,
-        {
-          headers: {
-            ...(user?.accessToken && { Authorization: `Bearer ${user.accessToken}` }),
-          },
-        }
+        {},
+        user?.accessToken
       );
       if (!res.ok) {
         throw new Error("Failed to fetch scraped content");
@@ -1208,6 +1252,25 @@ export function AssistantCreationFlow({
                       <div className="flex items-center justify-center gap-2 text-[var(--color-trust-strong)]">
                         <CheckCircle className="w-5 h-5" />
                         <span className="font-medium">Content successfully ingested!</span>
+                      </div>
+                    )}
+
+                    {ingestionError && (
+                      <div className="rounded-md border border-[var(--color-refuse-border)] bg-[var(--color-refuse-soft)] p-3 text-sm text-[var(--color-refuse-strong)]">
+                        <div className="font-medium mb-1">Ingestion failed</div>
+                        <div>{ingestionError}</div>
+                        <div className="mt-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              ingestionStartedRef.current = false;
+                              handleIngestion();
+                            }}
+                            disabled={isIngesting}
+                          >
+                            Retry ingestion
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>

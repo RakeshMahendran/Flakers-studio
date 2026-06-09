@@ -23,6 +23,19 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = React.useState(false);
+
+  // Detect ?session_expired=1 on mount. We read window.location directly
+  // (rather than via useSearchParams) to avoid the Next 16 Suspense
+  // requirement around useSearchParams on client pages — this is the
+  // simplest path that keeps the (auth) layout fully client-rendered.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("session_expired") === "1") {
+      setSessionExpired(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,6 +94,16 @@ export default function LoginPage() {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {sessionExpired && !error ? (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-md border border-[var(--color-caution-border)] bg-[var(--color-caution-soft)] p-3 text-sm text-[var(--color-caution-strong)]"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>Your session expired. Sign in to continue.</span>
+          </div>
+        ) : null}
+
         {error ? (
           <div
             role="alert"
