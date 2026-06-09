@@ -160,11 +160,11 @@ function BrandMark({ collapsed = false }: { collapsed?: boolean }) {
         FS
       </span>
       {!collapsed && (
-        <span className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold tracking-tight text-[var(--color-text-primary)]">
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate text-sm font-semibold tracking-tight text-[var(--color-text-primary)]">
             FlakersStudio
           </span>
-          <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+          <span className="truncate text-[10px] uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
             Workspace
           </span>
         </span>
@@ -243,7 +243,7 @@ function SidebarInner({ collapsed, onItemClick }: SidebarInnerProps) {
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span className="min-w-0 truncate">{item.label}</span>}
               </Link>
             );
           }
@@ -554,7 +554,7 @@ export function AppShell({ children }: AppShellProps) {
         <aside
           aria-label="Sidebar"
           className={cn(
-            "sticky top-0 hidden h-screen shrink-0 border-r md:flex",
+            "sticky top-0 hidden h-screen shrink-0 overflow-hidden border-r md:flex",
             "border-[var(--color-border-subtle)] bg-[var(--color-surface)]",
             "transition-[width] duration-[var(--duration-base)] ease-[var(--ease-out)]",
             sidebarCollapsed ? "w-16" : "w-60"

@@ -216,7 +216,10 @@ export function CommandPalette({
         keywords: ["governance", "rules", "policy", "shield"],
         onSelect: () => {
           close();
-          router.push(sanitizeRoute("/settings/governance"));
+          // `/settings/governance` doesn't exist yet — fall back to the
+          // settings index. Replace with the dedicated sub-route when
+          // governance settings ship as their own page.
+          router.push(sanitizeRoute("/settings"));
         },
       },
     ];
