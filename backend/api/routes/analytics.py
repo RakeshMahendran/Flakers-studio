@@ -4,7 +4,7 @@ Provides insights into system usage, performance, and content quality
 """
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import select, func, and_, desc, cast, Integer
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -108,7 +108,7 @@ async def get_system_stats(
         
         # Average processing time
         processing_time_stats = await db.execute(
-            select(func.avg(func.cast(ChatMessage.processing_time_ms, func.Integer())))
+            select(func.avg(cast(ChatMessage.processing_time_ms, Integer)))
             .select_from(Assistant)
             .join(ChatSession, ChatSession.assistant_id == Assistant.id)
             .join(ChatMessage, ChatMessage.session_id == ChatSession.id)
@@ -330,8 +330,8 @@ async def get_performance_metrics(
         # Response time statistics
         response_time_result = await db.execute(
             select(
-                func.avg(func.cast(ChatMessage.processing_time_ms, func.Integer())).label('avg_time'),
-                func.percentile_cont(0.95).within_group(func.cast(ChatMessage.processing_time_ms, func.Integer())).label('p95_time')
+                func.avg(cast(ChatMessage.processing_time_ms, Integer)).label('avg_time'),
+                func.percentile_cont(0.95).within_group(cast(ChatMessage.processing_time_ms, Integer)).label('p95_time')
             )
             .select_from(Assistant)
             .join(ChatSession, ChatSession.assistant_id == Assistant.id)
@@ -425,7 +425,7 @@ async def get_assistant_analytics(
                 func.count(func.distinct(ChatSession.id)).label('sessions'),
                 func.count(ChatMessage.id).label('messages'),
                 func.count(ChatMessage.id).filter(ChatMessage.decision == ChatDecision.ANSWER.value).label('answers'),
-                func.avg(func.cast(ChatMessage.processing_time_ms, func.Integer())).label('avg_time')
+                func.avg(cast(ChatMessage.processing_time_ms, Integer)).label('avg_time')
             )
             .join(ChatSession, ChatSession.assistant_id == assistant_id)
             .join(ChatMessage, ChatMessage.session_id == ChatSession.id)
